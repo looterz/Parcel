@@ -444,6 +444,35 @@ end
 -- Actions
 -- ---------------------------------------------------------------------------
 
+-- Taking one attachment or the money does not go through the queue, so nothing
+-- else would ever tell the archive this mail was emptied. The handle is kept and
+-- checked on the next inbox update: a mail that has stopped resolving was fully
+-- taken, and its record should say so rather than sitting on waiting forever.
+local drained = {}
+
+local function watchForDrain(current)
+	local handle = Mail:GetHandle(current)
+	if not handle then return end
+
+	for _, existing in ipairs(drained) do
+		if existing.key == handle.key and existing.expiresAt == handle.expiresAt then
+			return
+		end
+	end
+
+	drained[#drained + 1] = handle
+end
+
+local function settleDrained()
+	for position = #drained, 1, -1 do
+		local handle = drained[position]
+		if not Mail:Resolve(handle) then
+			ns.Archive:MarkDisposition(handle, "drain")
+			table.remove(drained, position)
+		end
+	end
+end
+
 function Reader:TakeSlot(slot)
 	local current = record()
 	if not current then return end
@@ -458,12 +487,14 @@ function Reader:TakeSlot(slot)
 		return
 	end
 
+	watchForDrain(current)
 	TakeInboxItem(current.index, slot)
 end
 
 function Reader:TakeMoney()
 	local current = record()
 	if current then
+		watchForDrain(current)
 		TakeInboxMoney(current.index)
 	end
 end
@@ -567,6 +598,7 @@ function Reader:IsOpen()
 end
 
 Events:Register("Parcel.Mail.Closed", function()
+	wipe(drained)
 	Reader:Close()
 end)
 
@@ -582,6 +614,7 @@ end)
 local watcher = CreateFrame("Frame")
 watcher:RegisterEvent("MAIL_INBOX_UPDATE")
 watcher:SetScript("OnEvent", function()
+	settleDrained()
 	if Reader:IsOpen() and not archived then
 		Reader:Refresh()
 	end

@@ -7,6 +7,25 @@ local Compat = ns.Compat
 
 local records = {}
 local byKey = {}
+
+-- Computed expiry, remembered per mail and per daysLeft value.
+--
+-- daysLeft is a snapshot. The server only updates it when it sends fresh inbox
+-- data, so computing time() + daysLeft * 86400 on every refresh walks the value
+-- forward in real time for as long as the player stands at the mailbox. That
+-- broke everything keyed on it: a handle taken five minutes after the archive
+-- captured the mail no longer matched the record it belonged to, so collected
+-- mail stayed marked as waiting and repeat captures could file the same mail
+-- twice.
+--
+-- Anchoring it means the same daysLeft always yields the same expiry, however
+-- long the mailbox stays open. When the server does send a new daysLeft the
+-- anchor changes with it, which is exactly when the value should move.
+local expiryAnchors = {}
+
+-- Record separator, the same one stableKey uses, so a key and a daysLeft can
+-- never run together into a value that collides with another pair.
+local SEPARATOR = string.char(30)
 local shownCount, totalCount = 0, 0
 
 -- How far apart two expiry instants can be and still be the same mail. daysLeft
@@ -117,6 +136,10 @@ function Mail:ModerniseKey(key)
 	return table.concat(fields, "\30", #fields - KEY_FIELDS + 1)
 end
 
+function Mail:ResetExpiryAnchors()
+	wipe(expiryAnchors)
+end
+
 function Mail:Refresh()
 	wipe(records)
 	wipe(byKey)
@@ -149,7 +172,12 @@ function Mail:Refresh()
 
 		-- daysLeft is a live countdown, so expiry is an exact instant and arrival
 		-- is only an estimate derived from the standard thirty day lifetime.
-		local expiresAt = now + daysLeft * SECONDS_PER_DAY
+		local anchorKey = key .. SEPARATOR .. tostring(daysLeft)
+		local expiresAt = expiryAnchors[anchorKey]
+		if not expiresAt then
+			expiresAt = now + daysLeft * SECONDS_PER_DAY
+			expiryAnchors[anchorKey] = expiresAt
+		end
 
 		local record = {
 			index = index,

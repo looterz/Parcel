@@ -47,19 +47,6 @@ jobs:
           echo "EOF" >> $GITHUB_OUTPUT
           echo "${CHANGELOG_RAW}"
 
-      - name: Create GitHub release
-        uses: softprops/action-gh-release@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ steps.get_version.outputs.VERSION }}
-          name: Release ${{ steps.get_version.outputs.VERSION }}
-          body: |
-            Changes in this Release:
-            ${{ steps.generate_changelog.outputs.CHANGELOG }}
-          draft: false
-          prerelease: false
-
       - name: Bundle addon
         run: |
           VERSION="${{ steps.get_version.outputs.VERSION }}"
@@ -83,6 +70,20 @@ jobs:
           cd /tmp
           zip -r "$BUILD_DIR/$ADDON_NAME-$VERSION.zip" "./$ADDON_NAME"
           ls -l "$BUILD_DIR"
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.get_version.outputs.VERSION }}
+          name: Release ${{ steps.get_version.outputs.VERSION }}
+          body: |
+            Changes in this Release:
+            ${{ steps.generate_changelog.outputs.CHANGELOG }}
+          draft: false
+          prerelease: false
+          files: build/${{ env.ADDON_NAME }}-${{ steps.get_version.outputs.VERSION }}.zip
 
       - name: Upload to CurseForge
         uses: itsmeow/curseforge-upload@3.1.1

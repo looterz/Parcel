@@ -288,6 +288,7 @@ end
 
 local function mailClosed()
 	mailOpen = false
+	Mail:ResetExpiryAnchors()
 	reportRun()
 
 	-- Anything taken by hand in the reader never went through a run, so the
