@@ -1,0 +1,97 @@
+name: Upload to CurseForge
+
+on:
+  push:
+    tags:
+      - "*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (e.g. v1.0.0)"
+        required: true
+
+env:
+  ADDON_NAME: Parcel
+  CURSEFORGE_PROJECT_ID: "1628178"
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get the version
+        id: get_version
+        run: echo "VERSION=${{ github.event.inputs.tag || github.ref_name }}" >> $GITHUB_OUTPUT
+
+      # Runs before the release is published so a bad interface number fails the
+      # build instead of shipping a file tagged for the wrong game flavors.
+      - name: Resolve CurseForge game versions
+        id: game_versions
+        env:
+          CURSEFORGE_API_TOKEN: ${{ secrets.CURSEFORGE_API_TOKEN }}
+        run: python3 .github/scripts/resolve_game_versions.py >> $GITHUB_OUTPUT
+
+      - name: Generate changelog
+        id: generate_changelog
+        run: |
+          CHANGELOG_RAW=$(git log --pretty=format:'* %s' -n 1 ${{ steps.get_version.outputs.VERSION }})
+          echo "CHANGELOG<<EOF" >> $GITHUB_OUTPUT
+          echo "${CHANGELOG_RAW}" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          echo "${CHANGELOG_RAW}"
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.get_version.outputs.VERSION }}
+          name: Release ${{ steps.get_version.outputs.VERSION }}
+          body: |
+            Changes in this Release:
+            ${{ steps.generate_changelog.outputs.CHANGELOG }}
+          draft: false
+          prerelease: false
+
+      - name: Bundle addon
+        run: |
+          VERSION="${{ steps.get_version.outputs.VERSION }}"
+          TEMP_DIR="/tmp/$ADDON_NAME"
+          BUILD_DIR="${{ github.workspace }}/build"
+          mkdir -p "$TEMP_DIR" "$BUILD_DIR"
+
+          # *.png is repository and CurseForge artwork only, the game client cannot load it.
+          # Docs and Tests are gitignored so they are never in the checkout; excluding
+          # them anyway costs nothing and survives someone committing them by mistake.
+          rsync -av \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='.gitignore' \
+            --exclude='build' \
+            --exclude='Docs' \
+            --exclude='Tests' \
+            --exclude='*.png' \
+            "${{ github.workspace }}/" "$TEMP_DIR/"
+
+          cd /tmp
+          zip -r "$BUILD_DIR/$ADDON_NAME-$VERSION.zip" "./$ADDON_NAME"
+          ls -l "$BUILD_DIR"
+
+      - name: Upload to CurseForge
+        uses: itsmeow/curseforge-upload@3.1.1
+        with:
+          project_id: ${{ env.CURSEFORGE_PROJECT_ID }}
+          file_path: build/${{ env.ADDON_NAME }}-${{ steps.get_version.outputs.VERSION }}.zip
+          display_name: ${{ env.ADDON_NAME }}-${{ steps.get_version.outputs.VERSION }}.zip
+          changelog: Release ${{ steps.get_version.outputs.VERSION }}
+          changelog_type: text
+          game_endpoint: wow
+          game_versions: ${{ steps.game_versions.outputs.GAME_VERSIONS }}
+          token: ${{ secrets.CURSEFORGE_API_TOKEN }}

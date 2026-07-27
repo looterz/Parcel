@@ -1,0 +1,11 @@
+<Bindings>
+	<Binding name="PARCEL_TOGGLE" header="PARCEL" category="ADDONS">
+		ParcelBinding_Toggle()
+	</Binding>
+	<Binding name="PARCEL_COLLECT" category="ADDONS">
+		ParcelBinding_Collect()
+	</Binding>
+	<Binding name="PARCEL_HISTORY" category="ADDONS">
+		ParcelBinding_History()
+	</Binding>
+</Bindings>

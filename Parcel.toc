@@ -1,0 +1,43 @@
+## Interface: 120007
+## Title: Parcel
+## Notes: A complete mailbox. Collect, sort, send, search and track your mail.
+## Author: looterz
+## X-License: MIT
+## Version: 1.0.0
+## SavedVariables: ParcelDB
+## IconTexture: Interface\AddOns\Parcel\Media\icon
+## Category: Mail
+## X-Category: Mail
+
+embeds.xml
+
+Core\Compat.lua
+Core\Locale.lua
+Core\Events.lua
+Core\Features.lua
+Core\Mail.lua
+Core\Filters.lua
+Core\Queue.lua
+Core\Collect.lua
+Core\Focus.lua
+Core\Send.lua
+Core\Drafts.lua
+Core\Roster.lua
+Core\Archive.lua
+Core\Alerts.lua
+Core\Auction.lua
+Core\Options.lua
+
+UI\Kit\Kit.lua
+UI\Kit\Widgets.lua
+UI\Kit\ScrollList.lua
+UI\Theme.lua
+UI\Window.lua
+UI\Reader.lua
+UI\Inbox.lua
+UI\Compose.lua
+UI\History.lua
+UI\Auction.lua
+UI\Broker.lua
+
+Parcel.lua
