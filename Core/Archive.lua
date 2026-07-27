@@ -703,6 +703,17 @@ Events:Register("Parcel.Queue.Completed", function(kind, handle)
 	Archive:MarkDisposition(handle, kind)
 end)
 
+-- Every mail about to be acted on, recorded before anything can take it away.
+--
+-- Capturing only from inbox updates was not enough: a run empties mail faster
+-- than the updates arrive, so a mail could be drained and gone before any
+-- capture ever saw it, and it then never appeared in history at all. Queue:Start
+-- refreshes the model immediately before firing this, so here the model holds
+-- exactly the mail the run is about to work through.
+Events:Register("Parcel.Queue.Started", function()
+	Archive:CaptureInbox()
+end)
+
 Events:Register("Parcel.Send.Success", function(sent)
 	Archive:RecordSent(sent)
 end)
@@ -710,7 +721,20 @@ end)
 local watcher = CreateFrame("Frame")
 watcher:RegisterEvent("MAIL_INBOX_UPDATE")
 watcher:SetScript("OnEvent", function()
-	if MailFrame and MailFrame:IsShown() or ns.Window and ns.Window:IsShown() then
-		Archive:CaptureInbox()
+	if not (MailFrame and MailFrame:IsShown() or ns.Window and ns.Window:IsShown()) then
+		return
 	end
+
+	-- CaptureInbox reads the model rather than the client, and nothing had
+	-- guaranteed the model was refreshed for this update yet: handlers run in
+	-- registration order and Core loads before UI, so the archive ran first and
+	-- captured whatever the previous refresh left behind. At a mailbox that is
+	-- the empty inbox from MAIL_SHOW, which is why nothing was recorded.
+	--
+	-- The queue does its own refreshing while it runs, so it is left alone.
+	if not ns.Queue:IsRunning() then
+		Mail:Refresh()
+	end
+
+	Archive:CaptureInbox()
 end)
