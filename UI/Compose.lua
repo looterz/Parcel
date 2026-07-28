@@ -13,7 +13,6 @@ local Send = ns.Send
 local Window = ns.Window
 local Events = ns.Events
 
-local LABEL_WIDTH = 62
 local SLOT_SIZE = 34
 local SLOTS_PER_ROW = 6
 
@@ -22,13 +21,13 @@ local page
 local function build(host)
 	local self = { frame = host }
 
-	local recipientLabel = Kit:CreateText(host, "dim", "RIGHT")
-	recipientLabel:SetPoint("TOPLEFT", host, "TOPLEFT", 0, -6)
-	recipientLabel:SetWidth(LABEL_WIDTH)
-	recipientLabel:SetText("To")
-
+	-- Labelled inside rather than beside, so the fields start at the same left
+	-- edge as the body, the attachments and the buttons. A label column would
+	-- indent only these two, and putting labels above costs enough height to
+	-- push the money row into the footer.
 	self.Recipient = Kit:CreateInput(host, 240, 22, function() self:Refresh() end)
-	self.Recipient:SetPoint("LEFT", recipientLabel, "RIGHT", 8, 0)
+	self.Recipient:SetPoint("TOPLEFT", host, "TOPLEFT", 0, -2)
+	self.Recipient:SetPlaceholder("To")
 
 	-- Attached after the change handler, because AttachAutoComplete hooks the
 	-- scripts it needs and a later SetScript would replace the lot.
@@ -64,20 +63,15 @@ local function build(host)
 		self.RecentPicker:SetValue(NONE_KEY)
 	end
 
-	local subjectLabel = Kit:CreateText(host, "dim", "RIGHT")
-	subjectLabel:SetPoint("TOPLEFT", recipientLabel, "BOTTOMLEFT", 0, -12)
-	subjectLabel:SetWidth(LABEL_WIDTH)
-	subjectLabel:SetText("Subject")
-
 	self.Subject = Kit:CreateInput(host, 240, 22, function() self:Refresh() end)
-	self.Subject:SetPoint("LEFT", subjectLabel, "RIGHT", 8, 0)
+	self.Subject:SetPoint("TOPLEFT", self.Recipient, "BOTTOMLEFT", 0, -8)
 	self.Subject.EditBox:SetMaxLetters(64)
 
 	-- Body
 	-- -----------------------------------------------------------------------
 
 	local bodyHolder = CreateFrame("Frame", nil, host, BackdropTemplateMixin and "BackdropTemplate" or nil)
-	bodyHolder:SetPoint("TOPLEFT", subjectLabel, "BOTTOMLEFT", 0, -12)
+	bodyHolder:SetPoint("TOPLEFT", self.Subject, "BOTTOMLEFT", 0, -12)
 	bodyHolder:SetPoint("TOPRIGHT", host, "TOPRIGHT", -4, 0)
 	bodyHolder:SetHeight(120)
 
@@ -281,8 +275,10 @@ local function build(host)
 	end
 
 	function self:Refresh()
-		-- What will actually be sent if the subject is left blank.
-		self.Subject:SetPlaceholder(Send:EffectiveSubject(""))
+		-- What will actually be sent if the subject is left blank, and the label
+		-- when there is nothing to fill in.
+		local auto = Send:EffectiveSubject("")
+		self.Subject:SetPlaceholder(auto ~= "" and auto or "Subject")
 
 		for index = 1, ATTACHMENTS_MAX_SEND do
 			local slot = self.Slots[index]

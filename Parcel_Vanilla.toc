@@ -3,7 +3,7 @@
 ## Notes: A complete mailbox. Collect, sort, send, search and track your mail.
 ## Author: looterz
 ## X-License: MIT
-## Version: 1.3.0
+## Version: 1.3.1
 ## SavedVariables: ParcelDB
 ## IconTexture: Interface\AddOns\Parcel\Media\icon
 ## Category: Mail
