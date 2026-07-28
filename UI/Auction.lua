@@ -249,7 +249,7 @@ local function build(host)
 	-- Tiles
 	self.Tiles = {
 		net = makeTile(host, 1, "Earned"),
-		sold = makeTile(host, 2, "Sold"),
+		pnl = makeTile(host, 2, "Profit & Loss"),
 		fees = makeTile(host, 3, "House cut"),
 		spent = makeTile(host, 4, "Spent buying"),
 	}
@@ -335,12 +335,14 @@ local function build(host)
 		self.Tiles.net.detailText = ("%s bid, %s deposit returned, less %s house cut."):format(
 			ns.Money(summary.gross), ns.Money(summary.deposits), ns.Money(summary.fees))
 
-		self.Tiles.sold.Value:SetText(tostring(summary.sold))
-		self.Tiles.sold.Note:SetText(summary.units > summary.sold
-			and ("%d units"):format(summary.units) or "auctions")
-		self.Tiles.sold.exactText = ("%d auctions, %d units"):format(summary.sold, summary.units)
-		self.Tiles.sold.detailText = ("%d expired, %d cancelled, %d outbid."):format(
-			summary.expired, summary.cancelled, summary.outbid)
+		local profit = summary.profit
+		local colour = profit > 0 and "|cff40ff40" or profit < 0 and "|cffff5050" or nil
+		local shown = Auction:FormatSigned(profit)
+		self.Tiles.pnl.Value:SetText(colour and (colour .. shown .. "|r") or shown)
+		self.Tiles.pnl.Note:SetText("sales less buying")
+		self.Tiles.pnl.exactText = ns.Money(profit)
+		self.Tiles.pnl.detailText = ("%s earned from sales, less %s spent buying."):format(
+			ns.Money(summary.net), ns.Money(summary.spent))
 
 		self.Tiles.fees.Value:SetText(shortMoney(summary.fees))
 		self.Tiles.fees.Note:SetText(summary.gross > 0
@@ -361,7 +363,8 @@ local function build(host)
 			and "Nothing archived yet.\nAuction mail is recorded as you collect it."
 			or "No auction sales in this period.")
 
-		self.Footer:SetText(("%d expired  ·  %d cancelled  ·  %d outbid, %s refunded"):format(
+		self.Footer:SetText(("%d sold (%d units)  ·  %d bought  ·  %d expired  ·  %d cancelled  ·  %d outbid, %s refunded"):format(
+			summary.sold, summary.units, summary.bought,
 			summary.expired, summary.cancelled, summary.outbid, ns.Money(summary.refunded)))
 
 		Window:SetSummary("")

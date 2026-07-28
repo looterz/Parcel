@@ -101,6 +101,10 @@ function Auction:Summary(seconds, character)
 		end
 	end
 
+	-- What the period actually left you with: sales net of the house, less what
+	-- you spent buying.
+	summary.profit = summary.net - summary.spent
+
 	return summary
 end
 
@@ -196,6 +200,14 @@ function Auction:FormatShort(copper)
 	end
 
 	return ("%s%d%s"):format(sign, units, COPPER)
+end
+
+-- A gain is signed so it reads as a change rather than a total. FormatShort
+-- already prefixes a loss.
+function Auction:FormatSigned(copper)
+	copper = math.floor(tonumber(copper) or 0)
+	if copper > 0 then return "+" .. self:FormatShort(copper) end
+	return self:FormatShort(copper)
 end
 
 -- Average net per day over the window, which is the number that tells you
