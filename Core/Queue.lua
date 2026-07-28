@@ -7,6 +7,14 @@ local Compat = ns.Compat
 local Mail = ns.Mail
 local Events = ns.Events
 
+local DISPOSITION_FOR = {
+	drain = "collected",
+	takeItems = "collected",
+	takeMoney = "collected",
+	["return"] = "returned",
+	delete = "deleted",
+}
+
 -- One mail can hold sixteen attachments plus money. Anything beyond that plus a
 -- little slack means the mail is not draining and the run would spin forever.
 local MAX_ATTEMPTS_PER_MAIL = ATTACHMENTS_MAX_RECEIVE + 4
@@ -97,7 +105,10 @@ end
 function Queue:Push(kind, record)
 	local handle = Mail:GetHandle(record)
 	if not handle then return false end
-	self.pending[#self.pending + 1] = { kind = kind, handle = handle }
+
+	local txn = ns.Ledger and ns.Ledger:For(record) or nil
+
+	self.pending[#self.pending + 1] = { kind = kind, handle = handle, txn = txn }
 	return true
 end
 
@@ -210,6 +221,9 @@ function Queue:CompleteEntry()
 	-- The archive needs to know what happened to this mail, and only the queue
 	-- knows whether it was drained, returned or deleted.
 	if entry then
+		if ns.Ledger and entry.txn then
+			ns.Ledger:Settle(entry.txn, DISPOSITION_FOR[entry.kind])
+		end
 		Events:Trigger("Parcel.Queue.Completed", entry.kind, entry.handle)
 	end
 

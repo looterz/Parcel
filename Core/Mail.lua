@@ -8,23 +8,11 @@ local Compat = ns.Compat
 local records = {}
 local byKey = {}
 
--- Computed expiry, remembered per mail and per daysLeft value.
---
--- daysLeft is a snapshot. The server only updates it when it sends fresh inbox
--- data, so computing time() + daysLeft * 86400 on every refresh walks the value
--- forward in real time for as long as the player stands at the mailbox. That
--- broke everything keyed on it: a handle taken five minutes after the archive
--- captured the mail no longer matched the record it belonged to, so collected
--- mail stayed marked as waiting and repeat captures could file the same mail
--- twice.
---
--- Anchoring it means the same daysLeft always yields the same expiry, however
--- long the mailbox stays open. When the server does send a new daysLeft the
--- anchor changes with it, which is exactly when the value should move.
+-- daysLeft is a snapshot the server only refreshes when it resends the inbox,
+-- so time() + daysLeft * 86400 walks forward for as long as you stand there.
+-- Anchoring per daysLeft keeps one snapshot yielding one expiry.
 local expiryAnchors = {}
 
--- Record separator, the same one stableKey uses, so a key and a daysLeft can
--- never run together into a value that collides with another pair.
 local SEPARATOR = string.char(30)
 local shownCount, totalCount = 0, 0
 

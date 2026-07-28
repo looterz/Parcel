@@ -241,7 +241,6 @@ function ParcelBinding_History()
 end
 
 -- Character names keep their capitalisation, so only the verb is lowercased.
--- Says where recording stopped, rather than leaving it to be guessed at.
 function Parcel:PrintDiagnostics()
 	local stats = ns.Archive.stats
 

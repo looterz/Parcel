@@ -178,14 +178,33 @@ local function addToIndex(archive, entry)
 	bucket[#bucket + 1] = entry
 end
 
-function Archive:Upsert(record)
+-- skip holds entries already spoken for this session, so mails identical down
+-- to the second each adopt their own record instead of collapsing onto one.
+function Archive:AdoptExisting(record, skip)
 	local archive = store()
-	if not archive then return end
+	if not archive then return nil end
 
-	local entry = findEntry(archive, record.key, record.expiresAt)
+	local bucket = index(archive)[record.key]
+	if not bucket then return nil end
 
-	if not entry then
-		entry = {
+	local best, bestDelta
+	for _, entry in ipairs(bucket) do
+		if not (skip and skip[entry]) then
+			local delta = math.abs((entry.expires or 0) - record.expiresAt)
+			if delta <= TOLERANCE and (not bestDelta or delta < bestDelta) then
+				best, bestDelta = entry, delta
+			end
+		end
+	end
+
+	return best
+end
+
+function Archive:NewEntry(record)
+	local archive = store()
+	if not archive then return nil end
+
+	local entry = {
 			id = record.key .. "|" .. tostring(math.floor(record.expiresAt)),
 			key = record.key,
 			-- Set once. Rewriting it every refresh would let the jitter walk.
@@ -198,13 +217,16 @@ function Archive:Upsert(record)
 			at = math.floor(record.arrivedAt),
 			seen = time(),
 		}
-		archive.entries[#archive.entries + 1] = entry
-		addToIndex(archive, entry)
-		self.stats.created = self.stats.created + 1
-	else
-		self.stats.updated = self.stats.updated + 1
-	end
+	archive.entries[#archive.entries + 1] = entry
+	addToIndex(archive, entry)
+	self.stats.created = self.stats.created + 1
+	return entry
+end
 
+function Archive:ApplyRecord(entry, record)
+	if not entry or not record then return end
+
+	self.stats.updated = self.stats.updated + 1
 	entry.who = record.sender
 	entry.subj = record.subject
 	entry.mtype = record.mailType
@@ -221,15 +243,17 @@ function Archive:Upsert(record)
 	haystacks[entry] = nil
 end
 
--- Counters, so a report of "nothing was recorded" can be answered with where it
--- stopped rather than with another guess.
+function Archive:Upsert(record)
+	local entry = self:AdoptExisting(record) or self:NewEntry(record)
+	self:ApplyRecord(entry, record)
+	return entry
+end
+
+-- Counters behind /parcel diag.
 Archive.stats = { captures = 0, seen = 0, created = 0, updated = 0, incomplete = 0, noStore = 0 }
 
--- The client fills the inbox in stages, and a header can arrive before its
--- sender and subject do. Recording one of those freezes a placeholder subject
--- and a wrong expiry into the entry, and the real mail then never matches its
--- own record again. Blizzard's own inbox has the same case and falls back to
--- UNKNOWN for display; an archive cannot do that, so it waits instead.
+-- The client fills the inbox in stages, so a header can arrive before its
+-- sender and subject. Blizzard's own inbox falls back to UNKNOWN for display.
 function Archive:IsComplete(record)
 	if not record then return false end
 	if not record.sender or record.sender == "" then return false end
@@ -251,18 +275,9 @@ function Archive:CaptureInbox()
 
 	self.stats.captures = self.stats.captures + 1
 
-	for _, record in ipairs(Mail:GetRecords()) do
-		self.stats.seen = self.stats.seen + 1
-		if self:IsComplete(record) then
-			self:Upsert(record)
-		else
-			self.stats.incomplete = self.stats.incomplete + 1
-		end
-	end
+	ns.Ledger:Observe(Mail:GetRecords())
 end
 
--- The live record's counterpart, or nil. Used by the diagnostic to say whether
--- a mail sitting in the inbox can find its own archive entry.
 function Archive:EntryFor(record)
 	local archive = store()
 	if not archive or not record then return nil end
@@ -277,6 +292,8 @@ function Archive:Wipe()
 	archive.entries = {}
 	wipe(haystacks)
 	invalidateIndex()
+
+	if ns.Ledger then ns.Ledger:Reset() end
 	Events:Trigger("Parcel.Archive.Changed")
 	return removed
 end
@@ -330,17 +347,13 @@ function Archive:MarkDisposition(handle, kind)
 	haystacks[entry] = nil
 end
 
--- Correcting a record by hand. MarkDisposition works from a queue handle, which
--- is what the queue holds; this takes the entry itself, which is what the
--- history view is holding, and is how a player fixes a record left wrong by an
--- older build or by mail taken while Parcel was not watching.
-function Archive:SetDisposition(entry, disposition)
+function Archive:SetDisposition(entry, disposition, manual)
 	if not entry or not disposition then return false end
 	if entry.disp == disposition then return false end
 
 	entry.disp = disposition
 	entry.dispAt = time()
-	entry.manual = true
+	if manual ~= false then entry.manual = true end
 	haystacks[entry] = nil
 
 	Events:Trigger("Parcel.Archive.Changed")
@@ -457,10 +470,7 @@ end
 -- Retention
 -- ---------------------------------------------------------------------------
 
--- Rough on purpose, and worth having anyway. What the file actually costs is
--- whatever the client's serialiser writes, which cannot be measured from Lua.
--- Counting the strings and giving every number a fixed weight tracks it closely
--- enough to tell a healthy archive from one that wants pruning.
+-- Approximate: the real cost is whatever the client's serialiser writes.
 function Archive:EstimateBytes()
 	local total = 0
 
@@ -641,13 +651,8 @@ local function matchesTerm(entry, term, fuzzy)
 	return contains(haystack(entry), value, fuzzy)
 end
 
--- Mail Parcel last saw sitting in an inbox and never watched leave. This is
--- what the inbox can show when you are nowhere near a mailbox, because the
--- client hands over no inbox data at all outside a mail session.
--- The archived counterpart of a live mail, if Parcel has one. Reading a body
--- from the client marks the mail read and creates a letter item, so the inbox
--- can never scan bodies itself; this lets it match against the ones already
--- captured when the mail was opened.
+-- GetInboxText marks the mail read and creates a letter item, so bodies are
+-- matched against what was captured rather than read live.
 function Archive:Find(record)
 	local archive = store()
 	if not archive or not record then return nil end
@@ -757,13 +762,8 @@ Events:Register("Parcel.Queue.Completed", function(kind, handle)
 	Archive:MarkDisposition(handle, kind)
 end)
 
--- Every mail about to be acted on, recorded before anything can take it away.
---
--- Capturing only from inbox updates was not enough: a run empties mail faster
--- than the updates arrive, so a mail could be drained and gone before any
--- capture ever saw it, and it then never appeared in history at all. Queue:Start
--- refreshes the model immediately before firing this, so here the model holds
--- exactly the mail the run is about to work through.
+-- A run empties mail faster than inbox updates arrive, so a mail could vanish
+-- before any capture saw it. Queue:Start refreshes immediately before this.
 Events:Register("Parcel.Queue.Started", function()
 	Archive:CaptureInbox()
 end)
@@ -779,13 +779,8 @@ watcher:SetScript("OnEvent", function()
 		return
 	end
 
-	-- CaptureInbox reads the model rather than the client, and nothing had
-	-- guaranteed the model was refreshed for this update yet: handlers run in
-	-- registration order and Core loads before UI, so the archive ran first and
-	-- captured whatever the previous refresh left behind. At a mailbox that is
-	-- the empty inbox from MAIL_SHOW, which is why nothing was recorded.
-	--
-	-- The queue does its own refreshing while it runs, so it is left alone.
+	-- Handlers run in registration order and Core loads before UI, so nothing
+	-- has refreshed the model for this update yet. The queue refreshes its own.
 	if not ns.Queue:IsRunning() then
 		Mail:Refresh()
 	end

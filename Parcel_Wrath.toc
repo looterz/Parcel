@@ -3,7 +3,7 @@
 ## Notes: A complete mailbox. Collect, sort, send, search and track your mail.
 ## Author: looterz
 ## X-License: MIT
-## Version: 1.0.3
+## Version: 1.0.4
 ## SavedVariables: ParcelDB
 ## IconTexture: Interface\AddOns\Parcel\Media\icon
 ## Category: Mail
@@ -24,6 +24,7 @@ Core\Send.lua
 Core\Drafts.lua
 Core\Roster.lua
 Core\Archive.lua
+Core\Ledger.lua
 Core\Alerts.lua
 Core\Auction.lua
 Core\Options.lua

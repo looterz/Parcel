@@ -43,6 +43,7 @@ end
 
 local function eligible(record)
 	if record.isGM or record.cod > 0 then return false end
+	if not ns.Archive:IsComplete(record) then return false end
 	if not hasSomethingToTake(record) then return false end
 	if filter and not filter(record) then return false end
 	return true
