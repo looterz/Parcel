@@ -169,6 +169,21 @@ local function makeTile(host, index, title)
 	tile.Title = Kit:CreateText(tile, "dim", "CENTER")
 	tile.Title:SetText(title)
 
+	-- The tile abbreviates so it fits. The exact figure lives here.
+	tile.titleText = title
+	tile:EnableMouse(true)
+	tile:SetScript("OnEnter", function(self)
+		if not self.exactText then return end
+		GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+		GameTooltip:AddLine(self.titleText, 1, 0.82, 0)
+		GameTooltip:AddLine(self.exactText, 1, 1, 1)
+		if self.detailText then
+			GameTooltip:AddLine(self.detailText, 0.7, 0.7, 0.7, true)
+		end
+		GameTooltip:Show()
+	end)
+	tile:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
 	tile.Value = Kit:CreateText(tile, "title", "CENTER")
 	tile.Note = Kit:CreateText(tile, "dim", "CENTER")
 
@@ -316,18 +331,30 @@ local function build(host)
 		self.Tiles.net.Note:SetText(seconds
 			and ("%s per day"):format(shortMoney(Auction:DailyAverage(seconds, character)))
 			or "all time")
+		self.Tiles.net.exactText = ns.Money(summary.net)
+		self.Tiles.net.detailText = ("%s bid, %s deposit returned, less %s house cut."):format(
+			ns.Money(summary.gross), ns.Money(summary.deposits), ns.Money(summary.fees))
 
 		self.Tiles.sold.Value:SetText(tostring(summary.sold))
 		self.Tiles.sold.Note:SetText(summary.units > summary.sold
 			and ("%d units"):format(summary.units) or "auctions")
+		self.Tiles.sold.exactText = ("%d auctions, %d units"):format(summary.sold, summary.units)
+		self.Tiles.sold.detailText = ("%d expired, %d cancelled, %d outbid."):format(
+			summary.expired, summary.cancelled, summary.outbid)
 
 		self.Tiles.fees.Value:SetText(shortMoney(summary.fees))
 		self.Tiles.fees.Note:SetText(summary.gross > 0
 			and ("%.0f%% of gross"):format(summary.fees / summary.gross * 100)
 			or "no sales")
+		self.Tiles.fees.exactText = ns.Money(summary.fees)
+		self.Tiles.fees.detailText = summary.gross > 0
+			and ("Taken from %s of winning bids."):format(ns.Money(summary.gross))
+			or "Nothing sold in this period."
 
 		self.Tiles.spent.Value:SetText(shortMoney(summary.spent))
 		self.Tiles.spent.Note:SetText(("%d won"):format(summary.bought))
+		self.Tiles.spent.exactText = ns.Money(summary.spent)
+		self.Tiles.spent.detailText = ("Across %d auctions won."):format(summary.bought)
 
 		self.Empty:SetShown(#rows == 0)
 		self.Empty:SetText(ns.Archive:Count() == 0

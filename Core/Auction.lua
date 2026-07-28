@@ -174,7 +174,9 @@ function Auction:FormatShort(copper)
 	local silver = math.floor((copper % 10000) / 100)
 	local units = copper % 100
 
-	if gold >= 1000000 then
+	if gold >= 1000000000 then
+		return ("%s%.1fb%s"):format(sign, gold / 1000000000, GOLD)
+	elseif gold >= 1000000 then
 		return ("%s%.1fm%s"):format(sign, gold / 1000000, GOLD)
 	elseif gold >= 10000 then
 		return ("%s%.0fk%s"):format(sign, gold / 1000, GOLD)
