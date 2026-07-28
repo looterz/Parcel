@@ -200,6 +200,9 @@ function Archive:Upsert(record)
 		}
 		archive.entries[#archive.entries + 1] = entry
 		addToIndex(archive, entry)
+		self.stats.created = self.stats.created + 1
+	else
+		self.stats.updated = self.stats.updated + 1
 	end
 
 	entry.who = record.sender
@@ -218,13 +221,64 @@ function Archive:Upsert(record)
 	haystacks[entry] = nil
 end
 
+-- Counters, so a report of "nothing was recorded" can be answered with where it
+-- stopped rather than with another guess.
+Archive.stats = { captures = 0, seen = 0, created = 0, updated = 0, incomplete = 0, noStore = 0 }
+
+-- The client fills the inbox in stages, and a header can arrive before its
+-- sender and subject do. Recording one of those freezes a placeholder subject
+-- and a wrong expiry into the entry, and the real mail then never matches its
+-- own record again. Blizzard's own inbox has the same case and falls back to
+-- UNKNOWN for display; an archive cannot do that, so it waits instead.
+function Archive:IsComplete(record)
+	if not record then return false end
+	if not record.sender or record.sender == "" then return false end
+	if not record.subject or record.subject == "" then return false end
+
+	if RETRIEVING_DATA and (record.subject == RETRIEVING_DATA or record.sender == RETRIEVING_DATA) then
+		return false
+	end
+
+	return true
+end
+
 function Archive:CaptureInbox()
 	local archive = store()
-	if not archive then return end
+	if not archive then
+		self.stats.noStore = self.stats.noStore + 1
+		return
+	end
+
+	self.stats.captures = self.stats.captures + 1
 
 	for _, record in ipairs(Mail:GetRecords()) do
-		self:Upsert(record)
+		self.stats.seen = self.stats.seen + 1
+		if self:IsComplete(record) then
+			self:Upsert(record)
+		else
+			self.stats.incomplete = self.stats.incomplete + 1
+		end
 	end
+end
+
+-- The live record's counterpart, or nil. Used by the diagnostic to say whether
+-- a mail sitting in the inbox can find its own archive entry.
+function Archive:EntryFor(record)
+	local archive = store()
+	if not archive or not record then return nil end
+	return findEntry(archive, record.key, record.expiresAt)
+end
+
+function Archive:Wipe()
+	local archive = store()
+	if not archive then return 0 end
+
+	local removed = #archive.entries
+	archive.entries = {}
+	wipe(haystacks)
+	invalidateIndex()
+	Events:Trigger("Parcel.Archive.Changed")
+	return removed
 end
 
 -- Only ever called for a mail the player actually opened. GetInboxText marks a

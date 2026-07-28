@@ -241,6 +241,41 @@ function ParcelBinding_History()
 end
 
 -- Character names keep their capitalisation, so only the verb is lowercased.
+-- Says where recording stopped, rather than leaving it to be guessed at.
+function Parcel:PrintDiagnostics()
+	local stats = ns.Archive.stats
+
+	self:Print(("Parcel %s on %s."):format(
+		ns.Compat:GetAddOnMetadata("Version") or "unknown", ns.Options:GetFlavorLabel()))
+	self:Print(("Mail session open: %s.  Queue running: %s."):format(
+		tostring(ns.Collect:IsMailOpen()), tostring(ns.Queue:IsRunning())))
+	self:Print(("Captures %d, records seen %d, created %d, updated %d, incomplete %d, no store %d."):format(
+		stats.captures, stats.seen, stats.created, stats.updated, stats.incomplete, stats.noStore))
+	self:Print(("History holds %d entries for %s."):format(
+		ns.Archive:Count(), ns.Archive:CurrentCharacter()))
+
+	ns.Mail:Refresh()
+	local records = ns.Mail:GetRecords()
+	self:Print(("Inbox right now: %d records."):format(#records))
+
+	local matched, missing = 0, 0
+	for index, record in ipairs(records) do
+		local entry = ns.Archive:EntryFor(record)
+		if entry then
+			matched = matched + 1
+		else
+			missing = missing + 1
+			if missing <= 5 then
+				self:Print(("  no entry: [%s] from %s, %.4f days left, complete=%s"):format(
+					tostring(record.subject), tostring(record.sender),
+					record.daysLeft or -1, tostring(ns.Archive:IsComplete(record))))
+			end
+		end
+	end
+
+	self:Print(("Of those, %d already have a history entry and %d do not."):format(matched, missing))
+end
+
 function Parcel:PrintArchiveSize()
 	local entries = ns.Archive:Count()
 	local bytes = ns.Archive:EstimateBytes()
@@ -299,6 +334,8 @@ function Parcel:HandleCommand(input)
 		local wanted = not ns.Features:IsEnabled("broker")
 		ns.Features:SetEnabled("broker", wanted)
 		self:Print(wanted and "Minimap button shown." or "Minimap button hidden.")
+	elseif command == "diag" then
+		self:PrintDiagnostics()
 	elseif command == "size" then
 		self:PrintArchiveSize()
 	elseif command == "expiring" then

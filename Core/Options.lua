@@ -34,6 +34,7 @@ Options.commands = {
 	{ "alt add <name>", "teach it a character it has not seen" },
 	{ "alt remove <name>", "forget one" },
 	{ "minimap", "show or hide the minimap button" },
+	{ "diag", "report why history may not be recording" },
 	{ "size", "how much room the history is using" },
 	{ "status", "client, profile, and what is in the mailbox" },
 }
@@ -449,6 +450,20 @@ function Options:Build(addon)
 						func = function()
 							local removed = ns.Archive:Prune()
 							ns.Addon:Print(("Pruned %d entries, %d remain."):format(removed, ns.Archive:Count()))
+						end,
+					},
+					wipe = {
+						type = "execute",
+						order = 5,
+						name = "Clear history",
+						desc = "Removes every entry Parcel has recorded, for every character. "
+							.. "Mail still sitting in a mailbox is not affected, but everything "
+							.. "already collected, returned or sent is forgotten.",
+						confirm = true,
+						confirmText = "Clear Parcel's entire mail history? This cannot be undone.",
+						func = function()
+							local removed = ns.Archive:Wipe()
+							ns.Addon:Print(("Cleared %d history entries."):format(removed))
 						end,
 					},
 					size = {
