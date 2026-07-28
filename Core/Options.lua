@@ -392,9 +392,10 @@ function Options:Build(addon)
 						type = "toggle",
 						order = 1,
 						width = "double",
-						name = "Use the amount as the subject",
-						desc = "Sending gold with no subject fills the subject in with the amount, "
-							.. "so the other end can see what arrived without opening it.",
+						name = "Fill in a blank subject",
+						desc = "Leave the subject empty and Parcel writes what is in the mail: "
+							.. "the items attached, or the amount of gold if there are none. The "
+							.. "subject field shows what will be sent before you send it.",
 					},
 					autofillRecipient = {
 						type = "toggle",

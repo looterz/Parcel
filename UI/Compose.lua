@@ -281,6 +281,9 @@ local function build(host)
 	end
 
 	function self:Refresh()
+		-- What will actually be sent if the subject is left blank.
+		self.Subject:SetPlaceholder(Send:EffectiveSubject(""))
+
 		for index = 1, ATTACHMENTS_MAX_SEND do
 			local slot = self.Slots[index]
 			local name, itemID, texture, count, quality = Send:GetAttachment(index)

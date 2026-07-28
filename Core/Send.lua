@@ -174,6 +174,52 @@ end
 -- Plain text on purpose: a mail subject is not a font string and will not
 -- render the texture escapes ns.Money produces, so the coin icons cannot be
 -- used here.
+-- The client caps a mail subject at 64 characters.
+local SUBJECT_LIMIT = 64
+
+local function textLength(text)
+	return strlenutf8 and strlenutf8(text) or #text
+end
+
+-- What is attached, said in a way that fits a subject line. Nil when there is
+-- nothing attached.
+function Send:DescribeAttachments()
+	local names, attached = {}, 0
+
+	for index = 1, ATTACHMENTS_MAX_SEND do
+		if HasSendMailItem(index) then
+			attached = attached + 1
+			local name, _, _, quantity = GetSendMailItem(index)
+			if name and name ~= "" then
+				names[#names + 1] = (quantity or 1) > 1
+					and ("%s x%d"):format(name, quantity)
+					or name
+			end
+		end
+	end
+
+	if attached == 0 then return nil end
+	-- Names arrive with the item data, so a slot the client has not caught up
+	-- with yet still gets counted.
+	if #names == 0 then return ("%d items"):format(attached) end
+
+	local text
+	if #names == 1 then
+		text = names[1]
+	elseif #names == 2 then
+		text = ("%s, %s"):format(names[1], names[2])
+	else
+		text = ("%s, %s and %d more"):format(names[1], names[2], #names - 2)
+	end
+
+	-- A truncated item name reads worse than a plain count.
+	if textLength(text) > SUBJECT_LIMIT then
+		return ("%d items"):format(attached)
+	end
+
+	return text
+end
+
 function Send:EffectiveSubject(subject)
 	subject = strtrim(subject or "")
 	if subject ~= "" then return subject end
@@ -181,6 +227,11 @@ function Send:EffectiveSubject(subject)
 	local addon = ns.Addon
 	local settings = addon and addon.db and addon.db.profile and addon.db.profile.send
 	if settings and settings.autoSubject == false then return subject end
+
+	-- Attachments first: what is in the mail says more than what it is worth,
+	-- and the gold is visible on the mail either way.
+	local attachments = self:DescribeAttachments()
+	if attachments then return attachments end
 
 	if self.mode == "money" and self.amount > 0 then
 		return GetMoneyString(self.amount)

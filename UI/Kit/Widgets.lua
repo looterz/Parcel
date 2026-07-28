@@ -188,10 +188,30 @@ function Kit:CreateInput(parent, width, height, onChanged)
 		box:SetScript("OnTextChanged", function(self) onChanged(self:GetText() or "") end)
 	end
 
+	local placeholder = self:CreateText(box, "dim")
+	placeholder:SetPoint("LEFT", box, "LEFT", 0, 0)
+	placeholder:SetPoint("RIGHT", box, "RIGHT", 0, 0)
+	placeholder:SetWordWrap(false)
+	placeholder:Hide()
+
+	local function showPlaceholder()
+		local text = placeholder.value
+		placeholder:SetShown(text ~= nil and text ~= "" and (box:GetText() or "") == "")
+	end
+
+	-- Hooked rather than set, so it survives whatever else attaches later.
+	box:HookScript("OnTextChanged", showPlaceholder)
+
 	holder.EditBox = box
 	function holder:GetValue() return strtrim(box:GetText() or "") end
 	function holder:SetValue(value) box:SetText(value or "") end
 	function holder:Focus() box:SetFocus() end
+
+	function holder:SetPlaceholder(text)
+		placeholder.value = text
+		placeholder:SetText(text or "")
+		showPlaceholder()
+	end
 
 	return holder
 end
