@@ -199,9 +199,11 @@ local function build(host)
 		}
 	end
 
-	function self:LoadDraft(name)
+	function self:LoadDraft(name, quiet)
 		local draft = Drafts:Get(name)
 		if not draft then return end
+
+		self.loadedDraft = name
 
 		self.Recipient:SetValue(draft.to or "")
 		self.Subject:SetValue(draft.subject or "")
@@ -212,9 +214,12 @@ local function build(host)
 		self.Money:SetCopper(draft.amount or 0)
 
 		self:Refresh()
-		-- Said out loud because attachments cannot come back with a draft and a
-		-- silently empty attachment row would look like a bug.
-		ns.Addon:Print(("Loaded the draft %s. Attach any items again before sending."):format(name))
+
+		if not quiet then
+			-- Said out loud because attachments cannot come back with a draft and
+			-- a silently empty attachment row would look like a bug.
+			ns.Addon:Print(("Loaded the draft %s. Attach any items again before sending."):format(name))
+		end
 	end
 
 	function self:RefreshDrafts()
@@ -224,7 +229,12 @@ local function build(host)
 		end
 
 		self.DraftPicker:SetOptions(options)
-		self.DraftPicker:SetValue(NONE_KEY)
+
+		-- Keep the draft on screen if it is still there, so a reload after
+		-- sending does not look like nothing is selected.
+		local keep = self.loadedDraft and Drafts:Get(self.loadedDraft) and self.loadedDraft
+		if not keep then self.loadedDraft = nil end
+		self.DraftPicker:SetValue(keep or NONE_KEY)
 
 		local on = Drafts:IsEnabled()
 		self.DraftPicker:SetShown(on)
@@ -233,6 +243,8 @@ local function build(host)
 	end
 
 	function self:Clear()
+		self.loadedDraft = nil
+		if self.DraftPicker then self.DraftPicker:SetValue(NONE_KEY) end
 		self.Recipient:SetValue("")
 		self.Subject:SetValue("")
 		body:SetText("")
@@ -356,15 +368,31 @@ Events:Register("Parcel.Send.Changed", function()
 	end
 end)
 
-Events:Register("Parcel.Send.Success", function()
+Events:Register("Parcel.Send.Success", function(sent)
 	ns.Addon:Print("Mail sent.")
-	if page then
-		page.Recipient:SetValue("")
-		page.Subject:SetValue("")
-		page.Body:SetText("")
-		page.Money:Clear()
-		page:Refresh()
+	if not page then return end
+
+	-- Sending the same thing repeatedly is the point of a draft, so it is put
+	-- straight back rather than leaving an empty form to fill in again.
+	if page.loadedDraft and Drafts:Get(page.loadedDraft) then
+		page:LoadDraft(page.loadedDraft, true)
+		page.DraftPicker:SetValue(page.loadedDraft)
+
+		local attached = sent and sent.items and #sent.items or 0
+		if attached > 0 then
+			ns.Addon:Print(("Draft %s is ready again. Attach the items before sending."):format(
+				page.loadedDraft))
+		else
+			ns.Addon:Print(("Draft %s is ready again."):format(page.loadedDraft))
+		end
+		return
 	end
+
+	page.Recipient:SetValue("")
+	page.Subject:SetValue("")
+	page.Body:SetText("")
+	page.Money:Clear()
+	page:Refresh()
 end)
 
 Events:Register("Parcel.Send.Failed", function()
