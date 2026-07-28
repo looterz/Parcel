@@ -16,7 +16,14 @@ local Events = ns.Events
 -- mailbox that keeps refilling cannot loop forever.
 local MAX_REFRESH_ROUNDS = 10
 
+-- Mail the client has not finished sending is not eligible, so a run has to be
+-- able to wait for it rather than deciding there is nothing to do.
+local MAX_PENDING_ROUNDS = 10
+local PENDING_WAIT = 0.5
+
 local refreshRounds = 0
+local pendingRounds = 0
+local pendingAnnounced = false
 local collecting = false
 local lastEligible
 local filter
@@ -123,6 +130,8 @@ end
 function Collect:Reset()
 	collecting = false
 	refreshRounds = 0
+	pendingRounds = 0
+	pendingAnnounced = false
 	lastEligible = nil
 	filter = nil
 	endSession()
@@ -162,6 +171,21 @@ function Collect:Continue()
 	Mail:Refresh()
 	local remaining = eligibleCount()
 
+	if remaining == 0 and ns.Ledger.pending > 0 and pendingRounds < MAX_PENDING_ROUNDS then
+		pendingRounds = pendingRounds + 1
+		if not pendingAnnounced then
+			pendingAnnounced = true
+			ns.Addon:Print(("Waiting for %d mails to finish loading."):format(ns.Ledger.pending))
+		end
+
+		local mySession = session
+		C_Timer.After(PENDING_WAIT, function()
+			if not stillCurrent(mySession) then return end
+			Collect:Continue()
+		end)
+		return
+	end
+
 	-- A round that leaves exactly as much behind as it started with is not going
 	-- to do better on the next pass, and re-queueing it is an infinite loop. The
 	-- realistic cause is an item the server keeps refusing.
@@ -192,6 +216,8 @@ function Collect:Finish()
 	reportRun()
 	collecting = false
 	refreshRounds = 0
+	pendingRounds = 0
+	pendingAnnounced = false
 	lastEligible = nil
 	filter = nil
 	endSession()
