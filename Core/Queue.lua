@@ -78,7 +78,7 @@ local function describeTaken(entry)
 	local before = entry.before
 	if not before then return nil end
 
-	local record = Mail:Resolve(entry.handle)
+	local record = entry.txn and ns.Ledger:RecordFor(entry.txn) or Mail:Resolve(entry.handle)
 	local afterItems = record and countAttachments(record.index) or {}
 	local afterMoney = record and record.money or 0
 
@@ -179,6 +179,7 @@ function Queue:Start()
 	end
 
 	Mail:Refresh()
+	if ns.Ledger then ns.Ledger:Observe(Mail:GetRecords()) end
 	driver:Show()
 
 	Events:Trigger("Parcel.Queue.Started", self.total)
@@ -253,7 +254,7 @@ function Queue:Step()
 	end
 
 	local entry = self.current
-	local record = Mail:Resolve(entry.handle)
+	local record = entry.txn and ns.Ledger:RecordFor(entry.txn) or Mail:Resolve(entry.handle)
 
 	-- No record means the mail is gone: fully drained, returned, or pushed past
 	-- the hundred the client will show. Nothing left to do with it either way.
@@ -344,6 +345,8 @@ events:SetScript("OnEvent", function(_, event, ...)
 		-- from past the hundredth, so every entry is re-resolved by fingerprint
 		-- rather than holding an index across an update.
 		Mail:Refresh()
+		if ns.Ledger then ns.Ledger:Observe(Mail:GetRecords()) end
+	if ns.Ledger then ns.Ledger:Observe(Mail:GetRecords()) end
 
 	elseif event == "UI_ERROR_MESSAGE" then
 		-- The payload is (message) on some clients and (errorType, message) on

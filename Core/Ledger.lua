@@ -1,10 +1,12 @@
 local ADDON, ns = ...
 
--- One transaction per mail, from first sight to settled outcome.
+-- One transaction per mail, anchored on the archive entry rather than on any
+-- value derived from the mail.
 --
--- States: pending (client still sending it, nothing written), committed
--- (written, and the transaction holds the entry), settled (outcome recorded).
--- Nothing is ever searched for after commit, so settling cannot miss.
+-- Matching is done once per observation: each live record takes the closest
+-- entry not already matched in that same pass. Anything left over is new. A
+-- transaction then holds both the entry and the current record, so draining and
+-- settling are direct rather than searches that can miss.
 
 local Ledger = {}
 ns.Ledger = Ledger
@@ -12,42 +14,24 @@ ns.Ledger = Ledger
 local Archive = ns.Archive
 local Events = ns.Events
 
-local byId = {}
-local claimed = {}
+local byEntry = {}
 local byRecord = {}
 
 Ledger.pending = 0
 
-local function idFor(record)
-	return record.key .. "|" .. tostring(math.floor(record.expiresAt))
-end
-
 function Ledger:Reset()
-	wipe(byId)
-	wipe(claimed)
+	wipe(byEntry)
 	wipe(byRecord)
 	self.pending = 0
 end
 
-function Ledger:Commit(txn, record)
-	if txn.entry then return txn.entry end
-
-	local entry = Archive:AdoptExisting(record, claimed) or Archive:NewEntry(record)
-	if not entry then return nil end
-
-	claimed[entry] = true
-	txn.entry = entry
-	txn.state = "committed"
-
-	Archive:ApplyRecord(entry, record)
-	return entry
-end
-
--- Takes the whole list: telling identical mails apart needs them side by side.
 function Ledger:Observe(records)
 	wipe(byRecord)
 
-	local counts = {}
+	-- Reset every pass. Held across passes it would stop a mail re-adopting the
+	-- entry it already owns, and it would file a duplicate instead.
+	local takenThisPass = {}
+	local seenTxn = {}
 	local pending = 0
 
 	for _, record in ipairs(records) do
@@ -57,30 +41,32 @@ function Ledger:Observe(records)
 			pending = pending + 1
 			Archive.stats.incomplete = Archive.stats.incomplete + 1
 		else
-			local id = idFor(record)
-			counts[id] = (counts[id] or 0) + 1
-
-			local list = byId[id]
-			if not list then
-				list = {}
-				byId[id] = list
+			local entry = Archive:AdoptExisting(record, takenThisPass)
+			if not entry then
+				entry = Archive:NewEntry(record)
 			end
 
-			local slot = counts[id]
-			local txn = list[slot]
-			if not txn then
-				txn = { id = id, slot = slot, state = "pending" }
-				list[slot] = txn
-			end
+			if entry then
+				takenThisPass[entry] = true
 
-			byRecord[record] = txn
+				local txn = byEntry[entry]
+				if not txn then
+					txn = { entry = entry, state = "committed" }
+					byEntry[entry] = txn
+				end
 
-			if txn.entry then
-				Archive:ApplyRecord(txn.entry, record)
-			else
-				self:Commit(txn, record)
+				txn.record = record
+				seenTxn[txn] = true
+				byRecord[record] = txn
+
+				Archive:ApplyRecord(entry, record)
 			end
 		end
+	end
+
+	-- Anything not seen this pass has left the mailbox.
+	for _, txn in pairs(byEntry) do
+		if not seenTxn[txn] then txn.record = nil end
 	end
 
 	self.pending = pending
@@ -93,10 +79,15 @@ function Ledger:For(record)
 	local txn = byRecord[record]
 	if txn then return txn end
 
-	-- Mail:Refresh builds new record tables, so a lookup can miss simply
-	-- because nothing has observed them yet.
+	-- Mail:Refresh builds new record tables, so a miss can just mean nothing
+	-- has observed them yet.
 	self:Observe(ns.Mail:GetRecords())
 	return byRecord[record]
+end
+
+-- The live mail a transaction is about, or nil once it has gone.
+function Ledger:RecordFor(txn)
+	return txn and txn.record or nil
 end
 
 function Ledger:Settle(txn, disposition)
@@ -109,13 +100,11 @@ end
 
 function Ledger:Stats()
 	local committed, settled = 0, 0
-	for _, list in pairs(byId) do
-		for _, txn in ipairs(list) do
-			if txn.state == "settled" then
-				settled = settled + 1
-			elseif txn.entry then
-				committed = committed + 1
-			end
+	for _, txn in pairs(byEntry) do
+		if txn.state == "settled" then
+			settled = settled + 1
+		else
+			committed = committed + 1
 		end
 	end
 	return committed, settled, self.pending

@@ -273,6 +273,28 @@ function Parcel:PrintDiagnostics()
 	end
 
 	self:Print(("Of those, %d already have a history entry and %d do not."):format(matched, missing))
+
+	for index, record in ipairs(records) do
+		if index <= 6 then
+			self:Print(("  live: [%s] %s  type=%s  money=%d"):format(
+				tostring(record.sender), tostring(record.subject),
+				tostring(record.mailType), record.money or 0))
+		end
+	end
+
+	local entries = ns.Archive:GetEntries()
+	local first = math.max(1, #entries - 7)
+	self:Print(("Last %d history entries:"):format(math.min(8, #entries)))
+	for index = first, #entries do
+		local entry = entries[index]
+		self:Print(("  [%s] %s  dir=%s type=%s disp=%s money=%d char=%s"):format(
+			tostring(entry.who), tostring(entry.subj), tostring(entry.dir),
+			tostring(entry.mtype), tostring(entry.disp), entry.money or 0,
+			tostring(entry.char)))
+	end
+
+	local committed, settled, pending = ns.Ledger:Stats()
+	self:Print(("Ledger: %d committed, %d settled, %d pending."):format(committed, settled, pending))
 end
 
 function Parcel:PrintArchiveSize()
