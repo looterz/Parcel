@@ -162,6 +162,67 @@ function Roster:GetRecent()
 	return list or {}
 end
 
+-- Contacts
+-- ---------------------------------------------------------------------------
+
+Roster.sourceLabels = {
+	alt = "Your characters",
+	recent = "Recently mailed",
+	guild = "Guild",
+	friend = "Friends",
+}
+
+-- Every name Parcel can offer, each with where it came from. Recents keep their
+-- order; everything else is alphabetical.
+function Roster:Contacts()
+	local out, seen = {}, {}
+	local me = (self:NormalizeName(UnitName("player") or "")):lower()
+
+	local function add(name, source)
+		if not name or name == "" then return end
+		local normalised = self:NormalizeName(name)
+		local lower = normalised:lower()
+		if lower == "" or lower == me or seen[lower] then return end
+		seen[lower] = true
+		out[#out + 1] = { name = normalised, source = source }
+	end
+
+	for _, name in ipairs(self:GetRecent()) do add(name, "recent") end
+
+	local function sorted(names)
+		table.sort(names)
+		return names
+	end
+
+	local alts = {}
+	for name in pairs(self:GetCharacters()) do alts[#alts + 1] = name end
+	for _, name in ipairs(sorted(alts)) do add(name, "alt") end
+
+	local mailed = {}
+	for name in pairs(self:GetKnown()) do mailed[#mailed + 1] = name end
+	for _, name in ipairs(sorted(mailed)) do add(name, "recent") end
+
+	if IsInGuild and IsInGuild() and GetNumGuildMembers then
+		local guild = {}
+		for index = 1, GetNumGuildMembers() or 0 do
+			local name = GetGuildRosterInfo(index)
+			if name then guild[#guild + 1] = name end
+		end
+		for _, name in ipairs(sorted(guild)) do add(name, "guild") end
+	end
+
+	if C_FriendList and C_FriendList.GetNumFriends then
+		local friends = {}
+		for index = 1, C_FriendList.GetNumFriends() or 0 do
+			local info = C_FriendList.GetFriendInfoByIndex(index)
+			if info and info.name then friends[#friends + 1] = info.name end
+		end
+		for _, name in ipairs(sorted(friends)) do add(name, "friend") end
+	end
+
+	return out
+end
+
 -- Suggestions
 -- ---------------------------------------------------------------------------
 

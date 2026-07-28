@@ -210,6 +210,7 @@ function Kit:AttachAutoComplete(input, suggest, onAccept)
 	local matches = {}
 	local index = 0
 	local suppress = false
+	local committed
 
 	local drop = CreateFrame("Frame", nil, input, BackdropTemplateMixin and "BackdropTemplate" or nil)
 	drop:SetPoint("TOPLEFT", input, "BOTTOMLEFT", 0, -2)
@@ -239,6 +240,7 @@ function Kit:AttachAutoComplete(input, suggest, onAccept)
 		box:SetText(name)
 		box:SetCursorPosition(#name)
 		suppress = false
+		committed = name
 		hide()
 		if onAccept then onAccept(name) end
 	end
@@ -296,7 +298,17 @@ function Kit:AttachAutoComplete(input, suggest, onAccept)
 	local function refresh()
 		if suppress then return end
 
-		matches = suggest(box:GetText() or "") or {}
+		local text = box:GetText() or ""
+		if committed and text == committed then
+			-- Holding exactly what was just chosen. OnTextChanged can arrive after
+			-- the commit, and suggesting the name back reopens the list over
+			-- whatever sits below the field.
+			hide()
+			return
+		end
+		committed = nil
+
+		matches = suggest(text) or {}
 		index = 0
 
 		for _, button in ipairs(rows) do button:Hide() end
@@ -334,14 +346,17 @@ function Kit:AttachAutoComplete(input, suggest, onAccept)
 		C_Timer.After(0.15, hide)
 	end)
 
-	box:SetScript("OnTabPressed", function()
-		step(IsShiftKeyDown() and -1 or 1)
+	box:SetScript("OnTabPressed", function(self)
+		-- Tab cycles the suggestions while there are any, and otherwise gets out
+		-- of the way rather than swallowing the key.
+		if not step(IsShiftKeyDown() and -1 or 1) then
+			self:ClearFocus()
+		end
 	end)
 
 	box:SetScript("OnEnterPressed", function(self)
 		if #matches > 0 then
 			commit(matches[index > 0 and index or 1].name)
-			return
 		end
 		self:ClearFocus()
 	end)
@@ -355,6 +370,20 @@ function Kit:AttachAutoComplete(input, suggest, onAccept)
 	end)
 
 	input.HideSuggestions = hide
+
+	-- Filling the field from somewhere else, a picker or a contact list, is
+	-- already a choice. Going through SetValue would fire OnTextChanged and
+	-- open the suggestion list on top of whatever sits below the field.
+	function input:SetValueQuiet(name)
+		name = name or ""
+		suppress = true
+		box:SetText(name)
+		box:SetCursorPosition(#name)
+		suppress = false
+		committed = name
+		hide()
+	end
+
 	return drop
 end
 

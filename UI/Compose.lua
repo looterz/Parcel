@@ -38,12 +38,38 @@ local function build(host)
 		self:Refresh()
 	end)
 
+	-- Recents first, because the name you want is usually one you used lately.
+	self.RecentPicker = Kit:CreateDropdown(host, 150, function(value)
+		if value == NONE_KEY then return end
+		self.Recipient:SetValueQuiet(value)
+		self:Refresh()
+	end)
+	self.RecentPicker:SetPoint("LEFT", self.Recipient, "RIGHT", 8, 0)
+
+	self.AddressBookButton = Kit:CreateButton(host, "Address Book", 116, function()
+		ns.AddressBook:Toggle(function(name)
+			self.Recipient:SetValueQuiet(name)
+			self:Refresh()
+		end)
+	end)
+	self.AddressBookButton:SetPoint("LEFT", self.RecentPicker, "RIGHT", 6, 0)
+
+	function self:RefreshRecents()
+		local options = { { value = NONE_KEY, label = "Recent" } }
+		for _, name in ipairs(ns.Roster:GetRecent()) do
+			options[#options + 1] = { value = name, label = name }
+		end
+
+		self.RecentPicker:SetOptions(options)
+		self.RecentPicker:SetValue(NONE_KEY)
+	end
+
 	local subjectLabel = Kit:CreateText(host, "dim", "RIGHT")
 	subjectLabel:SetPoint("TOPLEFT", recipientLabel, "BOTTOMLEFT", 0, -12)
 	subjectLabel:SetWidth(LABEL_WIDTH)
 	subjectLabel:SetText("Subject")
 
-	self.Subject = Kit:CreateInput(host, 460, 22, function() self:Refresh() end)
+	self.Subject = Kit:CreateInput(host, 240, 22, function() self:Refresh() end)
 	self.Subject:SetPoint("LEFT", subjectLabel, "RIGHT", 8, 0)
 	self.Subject.EditBox:SetMaxLetters(64)
 
@@ -205,7 +231,7 @@ local function build(host)
 
 		self.loadedDraft = name
 
-		self.Recipient:SetValue(draft.to or "")
+		self.Recipient:SetValueQuiet(draft.to or "")
 		self.Subject:SetValue(draft.subject or "")
 		body:SetText(draft.body or "")
 
@@ -245,7 +271,7 @@ local function build(host)
 	function self:Clear()
 		self.loadedDraft = nil
 		if self.DraftPicker then self.DraftPicker:SetValue(NONE_KEY) end
-		self.Recipient:SetValue("")
+		self.Recipient:SetValueQuiet("")
 		self.Subject:SetValue("")
 		body:SetText("")
 		self.Money:Clear()
@@ -297,6 +323,7 @@ local function build(host)
 
 	function self:OnShow()
 		self:RefreshDrafts()
+		self:RefreshRecents()
 
 		-- The client only accepts attachments while it believes the compose
 		-- pane is open, which normally follows Blizzard's tab.
@@ -307,7 +334,7 @@ local function build(host)
 		local settings = ns.Addon.db.profile.send
 		if settings.autofillRecipient and self.Recipient:GetValue() == "" then
 			local recent = ns.Roster:GetRecent()[1]
-			if recent then self.Recipient:SetValue(recent) end
+			if recent then self.Recipient:SetValueQuiet(recent) end
 		end
 
 		self:Refresh()
@@ -315,6 +342,7 @@ local function build(host)
 
 	function self:OnHide()
 		Send:SetComposing(false)
+		ns.AddressBook:Close()
 	end
 
 	page = self
@@ -372,6 +400,8 @@ Events:Register("Parcel.Send.Success", function(sent)
 	ns.Addon:Print("Mail sent.")
 	if not page then return end
 
+	page:RefreshRecents()
+
 	-- Sending the same thing repeatedly is the point of a draft, so it is put
 	-- straight back rather than leaving an empty form to fill in again.
 	if page.loadedDraft and Drafts:Get(page.loadedDraft) then
@@ -388,7 +418,7 @@ Events:Register("Parcel.Send.Success", function(sent)
 		return
 	end
 
-	page.Recipient:SetValue("")
+	page.Recipient:SetValueQuiet("")
 	page.Subject:SetValue("")
 	page.Body:SetText("")
 	page.Money:Clear()
@@ -405,7 +435,7 @@ function Compose:Open(recipient, subject, bodyText)
 	Window:Show("send")
 	if not page then return end
 
-	if recipient then page.Recipient:SetValue(recipient) end
+	if recipient then page.Recipient:SetValueQuiet(recipient) end
 	if subject then page.Subject:SetValue(subject) end
 	if bodyText then page.Body:SetText(bodyText) end
 	page:Refresh()

@@ -150,9 +150,9 @@ function Kit:CreateScrollList(parent, opts)
 
 	-- Anchored on all four sides rather than given a size, so the list tracks
 	-- its host instead of freezing whatever height was readable at build time.
-	function list:Fill(host, topOffset, bottomOffset, rightInset)
+	function list:Fill(host, topOffset, bottomOffset, rightInset, leftInset)
 		view:ClearAllPoints()
-		view:SetPoint("TOPLEFT", host, "TOPLEFT", 0, -(topOffset or 0))
+		view:SetPoint("TOPLEFT", host, "TOPLEFT", leftInset or 0, -(topOffset or 0))
 		view:SetPoint("BOTTOMRIGHT", host, "BOTTOMRIGHT", -(rightInset or 18), bottomOffset or 0)
 		layout()
 	end
