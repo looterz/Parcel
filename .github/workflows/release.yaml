@@ -85,7 +85,28 @@ jobs:
           prerelease: false
           files: build/${{ env.ADDON_NAME }}-${{ steps.get_version.outputs.VERSION }}.zip
 
+      # CurseForge answers with a 500 often enough that a single bad
+      # response should not fail a release GitHub has already published.
       - name: Upload to CurseForge
+        id: curseforge
+        continue-on-error: true
+        uses: itsmeow/curseforge-upload@3.1.1
+        with:
+          project_id: ${{ env.CURSEFORGE_PROJECT_ID }}
+          file_path: build/${{ env.ADDON_NAME }}-${{ steps.get_version.outputs.VERSION }}.zip
+          display_name: ${{ env.ADDON_NAME }}-${{ steps.get_version.outputs.VERSION }}.zip
+          changelog: Release ${{ steps.get_version.outputs.VERSION }}
+          changelog_type: text
+          game_endpoint: wow
+          game_versions: ${{ steps.game_versions.outputs.GAME_VERSIONS }}
+          token: ${{ secrets.CURSEFORGE_API_TOKEN }}
+
+      - name: Wait before retrying CurseForge
+        if: steps.curseforge.outcome == 'failure'
+        run: sleep 90
+
+      - name: Upload to CurseForge, retry
+        if: steps.curseforge.outcome == 'failure'
         uses: itsmeow/curseforge-upload@3.1.1
         with:
           project_id: ${{ env.CURSEFORGE_PROJECT_ID }}
