@@ -172,7 +172,7 @@ end
 local function updateRow(row, entry)
 	row.entry = entry
 
-	row.Columns.when:SetText(ageText(entry.at))
+	row.Columns.when:SetText(ageText(Archive:TimeOf(entry)))
 	row.Columns.who:SetText(entry.who or UNKNOWN)
 	row.Columns.subject:SetText(entry.subj or "")
 

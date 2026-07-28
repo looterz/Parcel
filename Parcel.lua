@@ -16,6 +16,7 @@ local defaults = {
 			minInterval = 0.30,
 			keepFreeSlots = 1,
 			verbose = true,
+			deleteEmptied = true,
 			postmasterNames = "",
 			-- Everything on, so a fresh install collects the way it always did.
 			filters = {

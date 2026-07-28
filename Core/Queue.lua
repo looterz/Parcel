@@ -7,6 +7,13 @@ local Compat = ns.Compat
 local Mail = ns.Mail
 local Events = ns.Events
 
+local function deleteEmptied()
+	local addon = ns.Addon
+	local collect = addon and addon.db and addon.db.profile and addon.db.profile.collect
+	if not collect then return true end
+	return collect.deleteEmptied ~= false
+end
+
 local DISPOSITION_FOR = {
 	drain = "collected",
 	takeItems = "collected",
@@ -311,6 +318,15 @@ function Queue:Step()
 	if entry.kind ~= "takeItems" and record.money > 0 then
 		TakeInboxMoney(record.index)
 		return self:Acted()
+	end
+
+	-- An auction invoice keeps its body text, so the server leaves the empty
+	-- mail behind after the money is taken and it sits there until deleted.
+	if entry.kind == "drain" and deleteEmptied()
+		and record.money == 0
+		and Mail:CountAttachments(record.index) == 0
+		and InboxItemCanDelete(record.index) then
+		DeleteInboxItem(record.index)
 	end
 
 	return self:CompleteEntry()

@@ -673,6 +673,19 @@ function Archive:Waiting(character)
 	return out
 end
 
+-- at is derived from daysLeft and is only ever an estimate of when the mail
+-- arrived. dispAt and seen are moments Parcel recorded exactly, so history is
+-- ordered by those: when you dealt with it if you did, when it arrived if not.
+function Archive:TimeOf(entry)
+	if not entry then return 0 end
+
+	if entry.disp and entry.disp ~= "inbox" then
+		return entry.dispAt or entry.seen or entry.at or 0
+	end
+
+	return entry.at or entry.seen or 0
+end
+
 function Archive:CurrentCharacter()
 	return characterName()
 end
@@ -730,7 +743,7 @@ function Archive:Search(query, direction, character)
 			end
 		end
 
-		table.sort(results, function(a, b) return (a.at or 0) > (b.at or 0) end)
+		table.sort(results, function(a, b) return Archive:TimeOf(a) > Archive:TimeOf(b) end)
 		return results
 	end
 

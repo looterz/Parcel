@@ -300,6 +300,15 @@ function Options:Build(addon)
 						name = "Report to chat",
 						desc = "Print what each collection brought in, and why it stopped if it stopped early.",
 					},
+					deleteEmptied = {
+						type = "toggle",
+						order = 4,
+						width = "double",
+						name = "Remove mail once it is empty",
+						desc = "Auction invoices keep their body text, so the server leaves the empty "
+							.. "mail behind after you take the money. This clears them out. Only ever "
+							.. "applies to mail Parcel has just emptied itself.",
+					},
 					filters = {
 						type = "group",
 						order = 10,
