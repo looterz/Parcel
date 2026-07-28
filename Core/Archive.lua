@@ -230,8 +230,8 @@ function Archive:ApplyRecord(entry, record)
 	entry.who = record.sender
 	entry.subj = record.subject
 	entry.mtype = record.mailType
-	entry.money = record.money
-	entry.cod = record.cod
+	entry.money = math.max(entry.money or 0, record.money or 0)
+	entry.cod = math.max(entry.cod or 0, record.cod or 0)
 
 	-- Attachments are re-read every pass because item data arrives from the
 	-- server after the header does, so the first look often has no names.

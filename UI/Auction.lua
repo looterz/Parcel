@@ -15,16 +15,17 @@ local TILE_TOP = 34
 local TILE_HEIGHT = 74
 
 local MODES = {
-	{ key = "sales", label = "Sales" },
+	{ key = "sales", label = "History" },
 	{ key = "items", label = "Top items" },
 }
 
 local COLUMNS = {
 	sales = {
-		{ key = "a", title = "When", x = 4, width = 96 },
-		{ key = "b", title = "Item", x = 104, width = 210 },
-		{ key = "c", title = "Buyer", x = 318, width = 130 },
-		{ key = "d", title = "Net", x = 452, width = 118, justify = "RIGHT" },
+		{ key = "a", title = "When", x = 4, width = 92 },
+		{ key = "b", title = "Item", x = 100, width = 186 },
+		{ key = "c", title = "Result", x = 290, width = 84 },
+		{ key = "d", title = "Buyer", x = 378, width = 104 },
+		{ key = "e", title = "Net", x = 486, width = 96, justify = "RIGHT" },
 	},
 	items = {
 		{ key = "a", title = "Item", x = 4, width = 230 },
@@ -66,13 +67,7 @@ local function rebuild()
 	local seconds = periodSeconds()
 
 	if mode == "sales" then
-		local entries = Auction:Entries(seconds, search, character)
-		wipe(rows)
-		for _, entry in ipairs(entries) do
-			if entry.mtype == "ahSold" then
-				rows[#rows + 1] = entry
-			end
-		end
+		rows = Auction:Entries(seconds, search, character)
 	else
 		rows = Auction:TopItems(seconds, 200, character)
 		if search ~= "" then
@@ -107,7 +102,7 @@ local function createRow(parent)
 	end)
 
 	row.Cells = {}
-	for _, key in ipairs({ "a", "b", "c", "d" }) do
+	for _, key in ipairs({ "a", "b", "c", "d", "e" }) do
 		row.Cells[key] = Kit:CreateText(row, "text")
 		row.Cells[key]:SetWordWrap(false)
 	end
@@ -122,8 +117,11 @@ local function createRow(parent)
 end
 
 local function layoutCells(row)
+	for _, cell in pairs(row.Cells) do cell:Hide() end
+
 	for _, column in ipairs(COLUMNS[mode]) do
 		local cell = row.Cells[column.key]
+		cell:Show()
 		cell:ClearAllPoints()
 		cell:SetPoint("LEFT", row, "LEFT", column.x, 0)
 		cell:SetWidth(column.width)
@@ -139,7 +137,7 @@ local function updateRow(row, item)
 		local invoice = item.invoice
 		local name = (invoice and invoice.item)
 			or (item.items and item.items[1] and item.items[1].name)
-			or item.subj or ""
+			or Auction:ItemFromSubject(item.subj) or item.subj or ""
 		local units = Auction:UnitsOf(item)
 		if units > 1 then
 			name = ("%s x%d"):format(name, units)
@@ -147,14 +145,20 @@ local function updateRow(row, item)
 
 		row.Cells.a:SetText(item.at and date("%d %b %H:%M", item.at) or "")
 		row.Cells.b:SetText(name)
-		row.Cells.c:SetText((invoice and invoice.player) or "")
-		row.Cells.d:SetText(ns.Money(Auction:NetOf(item)))
+
+		local label, colour = Auction:ResultOf(item)
+		row.Cells.c:SetText(label)
+		row.Cells.c:SetTextColor(colour[1], colour[2], colour[3])
+
+		row.Cells.d:SetText((invoice and invoice.player) or "")
+		row.Cells.e:SetText(Auction:ValueText(item))
 	else
 		row.entry = nil
 		row.Cells.a:SetText(item.name or "")
 		row.Cells.b:SetText(tostring(item.sales or 0))
 		row.Cells.c:SetText(tostring(item.units or 0))
 		row.Cells.d:SetText(ns.Money(item.net or 0))
+		row.Cells.e:SetText("")
 	end
 end
 
@@ -288,15 +292,18 @@ local function build(host)
 	self.Character:SetPoint("TOPRIGHT", host, "TOPRIGHT", -4, -(TILE_TOP + TILE_HEIGHT + 7))
 
 	self.Headers = {}
-	for _, key in ipairs({ "a", "b", "c", "d" }) do
+	for _, key in ipairs({ "a", "b", "c", "d", "e" }) do
 		local header = Kit:CreateText(host, "dim")
 		header:SetPoint("TOPLEFT", host, "TOPLEFT", 0, -(LIST_TOP - 16))
 		self.Headers[key] = header
 	end
 
 	function self:UpdateHeaders()
+		for _, header in pairs(self.Headers) do header:Hide() end
+
 		for _, column in ipairs(COLUMNS[mode]) do
 			local header = self.Headers[column.key]
+			header:Show()
 			header:ClearAllPoints()
 			header:SetPoint("TOPLEFT", host, "TOPLEFT", column.x, -(LIST_TOP - 16))
 			header:SetWidth(column.width)

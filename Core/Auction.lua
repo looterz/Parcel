@@ -145,6 +145,69 @@ function Auction:TopItems(seconds, limit, character)
 	return order
 end
 
+local RESULTS = {
+	ahSold = { "Sold", { 0.4, 0.9, 0.4 } },
+	ahWon = { "Bought", { 0.5, 0.7, 1 } },
+	ahExpired = { "Expired", { 0.65, 0.65, 0.65 } },
+	ahCancelled = { "Cancelled", { 0.65, 0.65, 0.65 } },
+	ahOutbid = { "Outbid", { 1, 0.7, 0.3 } },
+}
+
+function Auction:ResultOf(entry)
+	local result = RESULTS[entry and entry.mtype]
+	if not result then return "", { 0.7, 0.7, 0.7 } end
+	return result[1], result[2]
+end
+
+-- What the row is worth to you: earnings for a sale, an outlay for a purchase,
+-- the refund for an outbid, and nothing for mail that simply came back.
+function Auction:ValueText(entry)
+	local kind = entry and entry.mtype
+
+	if kind == SOLD then
+		return ns.Money(self:NetOf(entry))
+	elseif kind == WON then
+		local bid = (entry.invoice and entry.invoice.bid) or 0
+		return bid > 0 and ("-" .. ns.Money(bid)) or ""
+	elseif kind == OUTBID then
+		return (entry.money or 0) > 0 and ns.Money(entry.money) or ""
+	end
+
+	return ""
+end
+
+-- Subjects are "Auction successful: Copper Bar" and the like, localised. The
+-- same globals that classify them can pull the item back out.
+local ITEM_CAPTURES
+local function itemCaptures()
+	if ITEM_CAPTURES then return ITEM_CAPTURES end
+
+	ITEM_CAPTURES = {}
+	for _, subject in ipairs({
+		AUCTION_REMOVED_MAIL_SUBJECT, AUCTION_EXPIRED_MAIL_SUBJECT,
+		AUCTION_OUTBID_MAIL_SUBJECT, AUCTION_SOLD_MAIL_SUBJECT,
+		AUCTION_WON_MAIL_SUBJECT,
+	}) do
+		if type(subject) == "string" and subject ~= "" then
+			local escaped = subject:gsub("([%^%$%(%)%%%.%[%]%*%+%-%?])", "%%%1")
+			ITEM_CAPTURES[#ITEM_CAPTURES + 1] = "^" .. escaped:gsub("%%%%s", "(.+)") .. "$"
+		end
+	end
+
+	return ITEM_CAPTURES
+end
+
+function Auction:ItemFromSubject(subject)
+	if type(subject) ~= "string" then return nil end
+
+	for _, pattern in ipairs(itemCaptures()) do
+		local name = subject:match(pattern)
+		if name then return name end
+	end
+
+	return nil
+end
+
 -- Money, abbreviated to fit a tile
 -- ---------------------------------------------------------------------------
 
