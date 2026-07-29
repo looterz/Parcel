@@ -114,9 +114,24 @@ function Queue:Push(kind, record)
 	if not handle then return false end
 
 	local txn = ns.Ledger and ns.Ledger:For(record) or nil
+	if not txn then
+		-- Without somewhere to write the outcome this mail could be emptied and
+		-- still read as waiting. It is left for a later round, by which point it
+		-- will have been observed.
+		ns.Archive.stats.settleMissed = ns.Archive.stats.settleMissed + 1
+		return false
+	end
 
 	self.pending[#self.pending + 1] = { kind = kind, handle = handle, txn = txn }
 	return true
+end
+
+-- Written when the action is issued rather than when the mail finishes
+-- emptying, so a run that stops halfway still leaves an honest record of what
+-- it took.
+function Queue:RecordOutcome(entry, disposition)
+	if not entry or not entry.txn then return end
+	ns.Ledger:Settle(entry.txn, disposition)
 end
 
 -- Returns the number of mails queued. The caller decides what is eligible; the
@@ -298,12 +313,14 @@ function Queue:Step()
 
 	if entry.kind == "return" then
 		ReturnInboxItem(record.index)
+		self:RecordOutcome(entry, "returned")
 		self:Acted()
 		return self:CompleteEntry()
 	end
 
 	if entry.kind == "delete" then
 		DeleteInboxItem(record.index)
+		self:RecordOutcome(entry, "deleted")
 		self:Acted()
 		return self:CompleteEntry()
 	end
@@ -317,12 +334,14 @@ function Queue:Step()
 			end
 			TakeInboxItem(record.index, slot)
 			self.itemsTaken = self.itemsTaken + 1
+			self:RecordOutcome(entry, "collected")
 			return self:Acted()
 		end
 	end
 
 	if entry.kind ~= "takeItems" and record.money > 0 then
 		TakeInboxMoney(record.index)
+		self:RecordOutcome(entry, "collected")
 		return self:Acted()
 	end
 

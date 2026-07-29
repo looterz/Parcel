@@ -26,6 +26,14 @@ local archived
 local pendingSlot
 local selfDriven = false
 
+-- Taking one attachment or the money does not go through the queue, so this is
+-- the decision point for a manual take and the outcome is written here, exactly
+-- as the queue does when it issues an action.
+function Reader:RecordTaken(record)
+	local txn = ns.Ledger:For(record)
+	if txn then ns.Ledger:Settle(txn, "collected") end
+end
+
 -- COD mail charges you on taking, so it gets a confirmation of its own rather
 -- than borrowing Blizzard's, whose accept handler reaches into their frame.
 StaticPopupDialogs["PARCEL_COD_CONFIRM"] = {
@@ -35,6 +43,7 @@ StaticPopupDialogs["PARCEL_COD_CONFIRM"] = {
 	OnAccept = function()
 		local record = Mail:Resolve(handle)
 		if record and pendingSlot then
+			Reader:RecordTaken(record)
 			TakeInboxItem(record.index, pendingSlot)
 		end
 		pendingSlot = nil
@@ -444,34 +453,7 @@ end
 -- Actions
 -- ---------------------------------------------------------------------------
 
--- Taking one attachment or the money does not go through the queue, so nothing
--- else would ever tell the archive this mail was emptied. The handle is kept and
--- checked on the next inbox update: a mail that has stopped resolving was fully
--- taken, and its record should say so rather than sitting on waiting forever.
-local drained = {}
 
-local function watchForDrain(current)
-	local handle = Mail:GetHandle(current)
-	if not handle then return end
-
-	for _, existing in ipairs(drained) do
-		if existing.key == handle.key and existing.expiresAt == handle.expiresAt then
-			return
-		end
-	end
-
-	drained[#drained + 1] = handle
-end
-
-local function settleDrained()
-	for position = #drained, 1, -1 do
-		local handle = drained[position]
-		if not Mail:Resolve(handle) then
-			ns.Archive:MarkDisposition(handle, "drain")
-			table.remove(drained, position)
-		end
-	end
-end
 
 function Reader:TakeSlot(slot)
 	local current = record()
@@ -487,14 +469,14 @@ function Reader:TakeSlot(slot)
 		return
 	end
 
-	watchForDrain(current)
+	self:RecordTaken(current)
 	TakeInboxItem(current.index, slot)
 end
 
 function Reader:TakeMoney()
 	local current = record()
 	if current then
-		watchForDrain(current)
+		self:RecordTaken(current)
 		TakeInboxMoney(current.index)
 	end
 end
@@ -598,7 +580,6 @@ function Reader:IsOpen()
 end
 
 Events:Register("Parcel.Mail.Closed", function()
-	wipe(drained)
 	Reader:Close()
 end)
 
@@ -614,7 +595,6 @@ end)
 local watcher = CreateFrame("Frame")
 watcher:RegisterEvent("MAIL_INBOX_UPDATE")
 watcher:SetScript("OnEvent", function()
-	settleDrained()
 	if Reader:IsOpen() and not archived then
 		Reader:Refresh()
 	end

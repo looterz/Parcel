@@ -72,6 +72,29 @@ end
 -- Capture
 -- ---------------------------------------------------------------------------
 
+-- A link is only worth keeping when it says something the item id does not.
+-- Fields two to eight of the item string are the enchant, the four gem sockets,
+-- the suffix and the unique id; everything after that is the level and spec it
+-- happened to be linked at, which no tooltip depends on.
+function Archive:LinkMatters(link)
+	if type(link) ~= "string" then return false end
+
+	local payload = link:match("|Hitem:([^|]*)") or link:match("^item:(.*)$")
+	if not payload then return true end
+
+	local fields = {}
+	for value in (payload .. ":"):gmatch("([^:]*):") do
+		fields[#fields + 1] = value
+	end
+
+	for index = 2, 8 do
+		local value = fields[index]
+		if value and value ~= "" and value ~= "0" then return true end
+	end
+
+	return false
+end
+
 local function itemsFor(record)
 	local items = {}
 	for slot = 1, ATTACHMENTS_MAX_RECEIVE do
@@ -80,7 +103,7 @@ local function itemsFor(record)
 			local name, itemID, _, count, quality = GetInboxItem(record.index, slot)
 			items[#items + 1] = {
 				id = itemID or tonumber(link:match("item:(%d+)")),
-				l = link,
+				l = Archive:LinkMatters(link) and link or nil,
 				name = name,
 				n = count or 1,
 				q = quality,
@@ -240,6 +263,10 @@ function Archive:ApplyRecord(entry, record)
 	end
 
 	entry.invoice = entry.invoice or invoiceFor(record)
+	if entry.invoice and entry.invoice.item and entry.items and entry.items[1]
+		and entry.invoice.item == entry.items[1].name then
+		entry.invoice.item = nil
+	end
 	haystacks[entry] = nil
 end
 
@@ -681,6 +708,81 @@ function Archive:Find(record)
 	return findEntry(archive, record.key, record.expiresAt)
 end
 
+-- Correcting records left saying waiting
+-- ---------------------------------------------------------------------------
+
+-- A complete view of the inbox is the only sound evidence that a record saying
+-- waiting is wrong. Partial views lie in both directions: the display caps at
+-- fifty mails, and a header can arrive before its sender and subject do.
+function Archive:CanReconcile()
+	if not ns.Collect:IsMailOpen() then return false end
+	if ns.Queue:IsRunning() then return false end
+	if ns.Ledger.pending > 0 then return false end
+
+	local shown, total = Mail:GetCounts()
+	return shown == total
+end
+
+-- Anything this character still has filed as waiting that the mailbox is not
+-- showing has left it, whether or not Parcel was running when it did. Records
+-- from a build that wrote outcomes unreliably are corrected here.
+function Archive:ReconcileWaiting()
+	local archive = store()
+	if not archive or not self:CanReconcile() then return 0 end
+
+	local live = ns.Ledger:LiveEntries()
+	local character = characterName()
+	local healed = 0
+
+	for _, entry in ipairs(archive.entries) do
+		if entry.dir == "in" and entry.disp == "inbox" and entry.char == character
+			and not live[entry] then
+			entry.disp = "collected"
+			entry.dispAt = entry.dispAt or time()
+			-- Flagged, because this is inferred from the mail being absent
+			-- rather than watched happening.
+			entry.healed = true
+			haystacks[entry] = nil
+			healed = healed + 1
+		end
+	end
+
+	if healed > 0 then
+		Events:Trigger("Parcel.Archive.Changed")
+		ns.Addon:Print(("Corrected %d records that still said waiting for mail your mailbox no longer holds."):format(healed))
+	end
+
+	return healed
+end
+
+local EMPTY_CONFIRM = 2
+local confirming = false
+
+-- An inbox that has not arrived yet and one that is genuinely empty both read
+-- as zero, so an empty mailbox only counts as evidence once a second look
+-- agrees. A mailbox with anything in it has already proved its data arrived.
+function Archive:ReconcileOnUpdate()
+	local shown = Mail:GetCounts()
+	if shown > 0 then return self:ReconcileWaiting() end
+
+	if confirming or not self:CanReconcile() then return 0 end
+	confirming = true
+
+	C_Timer.After(EMPTY_CONFIRM, function()
+		confirming = false
+		local stillShown, stillTotal = Mail:GetCounts()
+		if stillShown == 0 and stillTotal == 0 then
+			Archive:ReconcileWaiting()
+		end
+	end)
+
+	return 0
+end
+
+function Archive:ResetReconcile()
+	confirming = false
+end
+
 function Archive:Waiting(character)
 	local out = {}
 
@@ -790,6 +892,7 @@ Events:Register("Parcel.Mail.Opened", function()
 end)
 
 Events:Register("Parcel.Mail.Closed", function()
+	Archive:ResetReconcile()
 	Archive:Prune()
 end)
 
@@ -810,7 +913,10 @@ end)
 local watcher = CreateFrame("Frame")
 watcher:RegisterEvent("MAIL_INBOX_UPDATE")
 watcher:SetScript("OnEvent", function()
-	if not (MailFrame and MailFrame:IsShown() or ns.Window and ns.Window:IsShown()) then
+	-- Parcel's own session state, not MailFrame:IsShown(). Parcel reparents the
+	-- Blizzard frame to a hidden holder, so it reads as hidden while a mail
+	-- session is very much open.
+	if not (ns.Collect:IsMailOpen() or ns.Window and ns.Window:IsShown()) then
 		return
 	end
 
@@ -821,4 +927,5 @@ watcher:SetScript("OnEvent", function()
 	end
 
 	Archive:CaptureInbox()
+	Archive:ReconcileOnUpdate()
 end)

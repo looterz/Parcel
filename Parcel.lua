@@ -84,13 +84,7 @@ end
 function Parcel:OnEnable()
 	self:RegisterChatCommand("parcel", "HandleCommand")
 
-	-- An earlier build recorded a fresh archive entry on every inbox update, so
-	-- existing histories are full of copies of the same mail. One pass at login
-	-- merges them; on a clean database it does nothing.
-	local merged = ns.Archive:Deduplicate()
-	if merged > 0 then
-		self:Print(("Merged %d duplicated history entries."):format(merged))
-	end
+	ns.Migrations:Run()
 end
 
 function Parcel:ResetWindowPositions()
@@ -244,8 +238,9 @@ end
 function Parcel:PrintDiagnostics()
 	local stats = ns.Archive.stats
 
-	self:Print(("Parcel %s on %s."):format(
-		ns.Compat:GetAddOnMetadata("Version") or "unknown", ns.Options:GetFlavorLabel()))
+	self:Print(("Parcel %s on %s, saved data version %s."):format(
+		ns.Compat:GetAddOnMetadata("Version") or "unknown", ns.Options:GetFlavorLabel(),
+		tostring(ns.Migrations:Version())))
 	self:Print(("Mail session open: %s.  Queue running: %s."):format(
 		tostring(ns.Collect:IsMailOpen()), tostring(ns.Queue:IsRunning())))
 	self:Print(("Captures %d, records seen %d, created %d, updated %d, incomplete %d, no store %d."):format(

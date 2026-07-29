@@ -100,6 +100,34 @@ function Ledger:Settle(txn, disposition)
 	return true
 end
 
+-- Mail Parcel watched leave the mailbox without an outcome ever being recorded.
+-- Both settle paths can miss, and a mail can also leave without the queue being
+-- the one that emptied it. Either way it is no longer waiting.
+function Ledger:ReconcileGone(disposition)
+	local settled = 0
+
+	for _, txn in pairs(byEntry) do
+		if txn.state ~= "settled" and txn.entry and not txn.record
+			and txn.entry.disp == "inbox" then
+			if self:Settle(txn, disposition or "collected") then
+				settled = settled + 1
+			end
+		end
+	end
+
+	return settled
+end
+
+-- The archive entries the mailbox is showing right now. Anything filed as
+-- waiting for this character and absent from this set is not in the mailbox.
+function Ledger:LiveEntries()
+	local live = {}
+	for entry, txn in pairs(byEntry) do
+		if txn.record then live[entry] = true end
+	end
+	return live
+end
+
 function Ledger:Stats()
 	local committed, settled = 0, 0
 	for _, txn in pairs(byEntry) do

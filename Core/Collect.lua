@@ -213,6 +213,20 @@ function Collect:Continue()
 end
 
 function Collect:Finish()
+	-- Anything the run emptied but left without an outcome. Only while the
+	-- mailbox is still open, because the inbox reads as empty once it closes,
+	-- and only while nothing is hidden past the display cap, because a mail can
+	-- drop off the list without leaving the mailbox.
+	if mailOpen and not Mail:HasHiddenMail() then
+		Mail:Refresh()
+		ns.Ledger:Observe(Mail:GetRecords())
+
+		local reconciled = ns.Ledger:ReconcileGone("collected")
+		if reconciled > 0 and verbose() then
+			ns.Addon:Print(("Recorded %d mails that had already gone."):format(reconciled))
+		end
+	end
+
 	reportRun()
 	collecting = false
 	refreshRounds = 0
