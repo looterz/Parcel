@@ -229,8 +229,14 @@ function Queue:CompleteEntry()
 	-- The archive needs to know what happened to this mail, and only the queue
 	-- knows whether it was drained, returned or deleted.
 	if entry then
-		if ns.Ledger and entry.txn then
-			ns.Ledger:Settle(entry.txn, DISPOSITION_FOR[entry.kind])
+		if ns.Ledger then
+			if entry.txn then
+				ns.Ledger:Settle(entry.txn, DISPOSITION_FOR[entry.kind])
+			else
+				-- No transaction means the mail was never observed as complete
+				-- before it was acted on, which is worth knowing about.
+				ns.Archive.stats.settleMissed = ns.Archive.stats.settleMissed + 1
+			end
 		end
 		Events:Trigger("Parcel.Queue.Completed", entry.kind, entry.handle)
 	end

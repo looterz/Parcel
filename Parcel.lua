@@ -241,7 +241,6 @@ function ParcelBinding_History()
 	ns.Window:Show("history")
 end
 
--- Character names keep their capitalisation, so only the verb is lowercased.
 function Parcel:PrintDiagnostics()
 	local stats = ns.Archive.stats
 
@@ -296,6 +295,17 @@ function Parcel:PrintDiagnostics()
 
 	local committed, settled, pending = ns.Ledger:Stats()
 	self:Print(("Ledger: %d committed, %d settled, %d pending."):format(committed, settled, pending))
+
+	local counts, waiting = ns.Archive:DispositionCounts()
+	local parts = {}
+	for disposition, count in pairs(counts) do
+		parts[#parts + 1] = ("%s %d"):format(disposition, count)
+	end
+	table.sort(parts)
+	self:Print("History by state: " .. table.concat(parts, ", "))
+	self:Print(("Still waiting: %d received mails."):format(waiting))
+	self:Print(("Settles: %d by transaction, %d by handle, %d missed."):format(
+		stats.settledByLedger, stats.settledByHandle, stats.settleMissed))
 end
 
 function Parcel:PrintArchiveSize()
@@ -311,6 +321,7 @@ function Parcel:PrintArchiveSize()
 	end
 end
 
+-- Character names keep their capitalisation, so only the verb is lowercased.
 function Parcel:HandleAltCommand(rest)
 	local verb, name = rest:match("^(%S*)%s*(.*)$")
 	verb = (verb or ""):lower()

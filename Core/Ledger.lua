@@ -93,7 +93,9 @@ end
 function Ledger:Settle(txn, disposition)
 	if not txn or not disposition or not txn.entry then return false end
 
-	Archive:SetDisposition(txn.entry, disposition, false)
+	if Archive:SetDisposition(txn.entry, disposition, false) then
+		Archive.stats.settledByLedger = Archive.stats.settledByLedger + 1
+	end
 	txn.state = "settled"
 	return true
 end

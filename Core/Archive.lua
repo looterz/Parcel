@@ -250,7 +250,10 @@ function Archive:Upsert(record)
 end
 
 -- Counters behind /parcel diag.
-Archive.stats = { captures = 0, seen = 0, created = 0, updated = 0, incomplete = 0, noStore = 0 }
+Archive.stats = {
+	captures = 0, seen = 0, created = 0, updated = 0, incomplete = 0, noStore = 0,
+	settledByLedger = 0, settledByHandle = 0, settleMissed = 0,
+}
 
 -- The client fills the inbox in stages, so a header can arrive before its
 -- sender and subject. Blizzard's own inbox falls back to UNKNOWN for display.
@@ -337,14 +340,33 @@ function Archive:MarkDisposition(handle, kind)
 	if not archive or not handle then return end
 
 	local entry = findEntry(archive, handle.key, handle.expiresAt)
-	if not entry then return end
+	if not entry then
+		self.stats.settleMissed = self.stats.settleMissed + 1
+		return
+	end
 
 	local disposition = DISPOSITION[kind]
 	if disposition then
+		if entry.disp ~= disposition then
+			self.stats.settledByHandle = self.stats.settledByHandle + 1
+		end
 		entry.disp = disposition
 		entry.dispAt = time()
 	end
 	haystacks[entry] = nil
+end
+
+-- How the archive currently reads, for the diagnostic.
+function Archive:DispositionCounts()
+	local counts, waiting = {}, 0
+
+	for _, entry in ipairs(self:GetEntries()) do
+		local disposition = entry.disp or "inbox"
+		counts[disposition] = (counts[disposition] or 0) + 1
+		if disposition == "inbox" and entry.dir == "in" then waiting = waiting + 1 end
+	end
+
+	return counts, waiting
 end
 
 function Archive:SetDisposition(entry, disposition, manual)
