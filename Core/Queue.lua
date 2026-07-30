@@ -137,17 +137,32 @@ end
 
 -- Returns the number of mails queued. The caller decides what is eligible; the
 -- runner still refuses COD and GM mail no matter what it is handed.
+local function moneyOnly(record)
+	return (record.itemCount or 0) == 0
+end
+
+-- Gold first, attachments after. Money needs no bag space, so banking it before
+-- anything can fill the bags means a run that does run out of room has still
+-- taken everything it possibly could. Inbox order is kept within each pass.
 function Queue:PushMatching(kind, predicate)
 	local queued = 0
-	for _, record in ipairs(Mail:GetRecords()) do
-		if record.isGM or record.cod > 0 then
-			-- never automated, in any mode
-		elseif not predicate or predicate(record) then
-			if self:Push(kind, record) then
-				queued = queued + 1
+
+	for pass = 1, 2 do
+		local wantMoneyOnly = pass == 1
+
+		for _, record in ipairs(Mail:GetRecords()) do
+			if record.isGM or record.cod > 0 then
+				-- never automated, in any mode
+			elseif moneyOnly(record) == wantMoneyOnly then
+				if not predicate or predicate(record) then
+					if self:Push(kind, record) then
+						queued = queued + 1
+					end
+				end
 			end
 		end
 	end
+
 	return queued
 end
 
