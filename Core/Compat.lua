@@ -40,14 +40,22 @@ Compat.isClassic = not Compat.isRetail
 function ns.Money(copper)
 	copper = math.floor(tonumber(copper) or 0)
 
+	-- Retail routes this through C_CurrencyInfo, which errors on a negative
+	-- amount, and a profit and loss figure is routinely negative.
+	local sign = ""
+	if copper < 0 then
+		sign = "-"
+		copper = -copper
+	end
+
 	local addon = ns.Addon
 	local ui = addon and addon.db and addon.db.profile and addon.db.profile.ui
 	if ui and ui.moneyIcons == false then
-		return GetMoneyString(copper)
+		return sign .. GetMoneyString(copper)
 	end
 
-	if GetCoinTextureString then return GetCoinTextureString(copper) end
-	return GetMoneyString(copper)
+	if GetCoinTextureString then return sign .. GetCoinTextureString(copper) end
+	return sign .. GetMoneyString(copper)
 end
 
 -- An item slot button.
