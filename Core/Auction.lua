@@ -238,6 +238,48 @@ function Auction:LinkForName(name)
 	return ns.ItemNames and ns.ItemNames:LinkFor(name) or nil
 end
 
+-- Every sale of one item in a window, newest first.
+function Auction:SalesOf(name, seconds, character)
+	local out = {}
+	if not name or name == "" then return out end
+
+	for _, entry in ipairs(self:Entries(seconds, nil, character)) do
+		if entry.mtype == SOLD and self:ItemNameOf(entry) == name then
+			out[#out + 1] = entry
+		end
+	end
+
+	table.sort(out, function(left, right)
+		return timestamp(left) > timestamp(right)
+	end)
+
+	return out
+end
+
+-- What one item did over the window. Returns the figures and the sales they
+-- were worked out from, so a caller wanting both does not walk twice.
+function Auction:ItemStats(name, seconds, character)
+	local sales = self:SalesOf(name, seconds, character)
+	local stats = { sales = #sales, units = 0, net = 0, best = 0 }
+
+	for _, entry in ipairs(sales) do
+		local net = self:NetOf(entry)
+		local at = timestamp(entry)
+
+		stats.units = stats.units + self:UnitsOf(entry)
+		stats.net = stats.net + net
+		if net > stats.best then stats.best = net end
+		if not stats.first or at < stats.first then stats.first = at end
+		if not stats.last or at > stats.last then stats.last = at end
+	end
+
+	-- Per unit, not per sale: a stack of twenty and a single are not comparable
+	-- any other way.
+	stats.perUnit = stats.units > 0 and math.floor(stats.net / stats.units) or 0
+
+	return stats, sales
+end
+
 local RESULTS = {
 	ahSold = { "Sold", { 0.4, 0.9, 0.4 } },
 	ahWon = { "Bought", { 0.5, 0.7, 1 } },

@@ -16,26 +16,6 @@ ns.Kit = Kit
 local BACKDROP_TEMPLATE = BackdropTemplateMixin and "BackdropTemplate" or nil
 
 local PALETTES = {
-	light = {
-		panel = {
-			bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
-			edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
-			tile = true,
-			tileSize = 32,
-			edgeSize = 32,
-			insets = { left = 8, right = 8, top = 8, bottom = 8 },
-		},
-		panelColor = { 1, 1, 1, 1 },
-		borderColor = { 1, 1, 1, 1 },
-		title = { 1, 0.82, 0 },
-		text = { 0.92, 0.90, 0.84 },
-		dim = { 0.62, 0.60, 0.55 },
-		accent = { 1, 0.82, 0 },
-		rowHighlight = { 1, 1, 1, 0.08 },
-		rowSelected = { 1, 0.82, 0, 0.18 },
-		inputBackdrop = { 0, 0, 0, 0.35 },
-		divider = { 1, 0.82, 0, 0.25 },
-	},
 	dark = {
 		panel = {
 			bgFile = "Interface\\Buttons\\WHITE8X8",
@@ -72,11 +52,11 @@ local PALETTES = {
 			tile = true,
 			tileSize = 256,
 			edgeSize = 32,
-			-- Tighter than the 11/12 the Light skin uses with the same border art.
-			-- That art pairs with UI-DialogBox-Background, which carries its own
-			-- margin; marble is a flat tile with none, so at Blizzard's insets it
-			-- stops short and leaves a gap inside the gold trim. These run the
-			-- fill under the trim instead, where the overlap is hidden.
+			-- Tighter than the 11/12 this border art is normally paired with. It
+			-- expects UI-DialogBox-Background, which carries its own margin;
+			-- marble is a flat tile with none, so at Blizzard's insets it stops
+			-- short and leaves a gap inside the gold trim. These run the fill
+			-- under the trim instead, where the overlap is hidden.
 			insets = { left = 8, right = 8, top = 8, bottom = 8 },
 		},
 		panelColor = { 1, 1, 1, 1 },
@@ -93,11 +73,10 @@ local PALETTES = {
 }
 
 -- Order the settings dropdown offers them in.
-Kit.themeOrder = { "dark", "light", "blizzard" }
+Kit.themeOrder = { "dark", "blizzard" }
 
 Kit.themeLabels = {
 	dark = "Dark",
-	light = "Light",
 	blizzard = "Blizzard",
 }
 
@@ -116,7 +95,7 @@ local currentTheme = "blizzard"
 local themed = {}
 
 function Kit:GetPalette(name)
-	return PALETTES[name or currentTheme] or PALETTES.light
+	return PALETTES[name or currentTheme] or PALETTES.dark
 end
 
 function Kit:GetThemeName()

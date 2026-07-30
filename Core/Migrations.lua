@@ -10,7 +10,7 @@ local ADDON, ns = ...
 local Migrations = {}
 ns.Migrations = Migrations
 
-Migrations.CURRENT = 2
+Migrations.CURRENT = 3
 
 -- [version] = what to do to reach that version from the one before it.
 Migrations.steps = {
@@ -46,6 +46,29 @@ Migrations.steps = {
 		if dropped > 0 then
 			ns.Addon:Print(("Tidied %d stored item links."):format(dropped))
 		end
+	end,
+
+	-- The Light skin is gone. It was the dark dialog stone with pale text on it,
+	-- which is a second Dark theme wearing the wrong name, and no texture the
+	-- client ships made a paper version of it readable.
+	--
+	-- Theme:GetName already falls back for a name it does not recognise, so
+	-- this is only about not leaving a dead value in saved data.
+	[3] = function()
+		local db = ns.Addon and ns.Addon.db
+		local profiles = db and db.profiles
+		if not profiles then return end
+
+		local moved = 0
+		for _, profile in pairs(profiles) do
+			if type(profile) == "table" and type(profile.ui) == "table"
+				and profile.ui.theme == "light" then
+				profile.ui.theme = "dark"
+				moved = moved + 1
+			end
+		end
+
+		if moved > 0 and ns.Theme then ns.Theme:Apply() end
 	end,
 }
 

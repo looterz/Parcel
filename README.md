@@ -69,6 +69,8 @@ Nothing else can tell you that.
 
 - Earned, sold, house cut and spent, by day, week, month, year or all time
 - Top sellers ranked by what they actually netted, not by how many moved
+- Click any of them for its own panel: every sale, the average per unit, the
+  best one, and the span it sold over
 - Every sale listed with the deposit and the cut broken out
 - Profit and loss counts the gold you take at a vendor, so buying under the
   vendor price and selling the difference reads as the profit it is
@@ -95,7 +97,7 @@ Nothing else can tell you that.
   also works with Titan Panel, Bazooka, ElvUI or any broker display
 - Holds off trade requests and guild charters while you are at a mailbox
 - Keybindings for opening Parcel, collecting, and jumping to history
-- Dark, Light and Blizzard themes for the Parcel UI
+- Dark and Blizzard themes for the Parcel UI
 - Any feature can be switched off, and settings support profiles
 - Chat commands for everything, with a Help tab that documents them
 - One download covers Retail, Classic Era, Burning Crusade, Wrath, Cataclysm

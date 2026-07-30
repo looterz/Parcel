@@ -59,6 +59,13 @@ local function periodSeconds()
 	end
 end
 
+local function periodLabel()
+	for _, entry in ipairs(Auction.periods) do
+		if entry.key == period then return entry.label end
+	end
+	return ""
+end
+
 local function shortMoney(copper)
 	return Auction:FormatShort(copper)
 end
@@ -84,6 +91,11 @@ local function rebuild()
 
 	if list then list:SetData(rows) end
 	if page then page:UpdateChrome() end
+	-- Reopened rather than refreshed, so it follows the period and character
+	-- the tab is now showing rather than the ones it was opened with.
+	if ns.ItemDetail and ns.ItemDetail:IsShown() then
+		ns.ItemDetail:Open(ns.ItemDetail:CurrentName(), seconds, character, periodLabel())
+	end
 end
 
 -- Rows
@@ -110,6 +122,8 @@ local function createRow(parent)
 	row:SetScript("OnClick", function(self)
 		if self.entry then
 			ns.Reader:OpenArchived(self.entry)
+		elseif self.bucket then
+			ns.ItemDetail:Open(self.bucket.name, periodSeconds(), character, periodLabel())
 		end
 	end)
 
@@ -164,6 +178,7 @@ local function updateRow(row, item)
 
 	if mode == "sales" then
 		row.entry = item
+		row.bucket = nil
 		local invoice = item.invoice
 		local name = Auction:ItemNameOf(item) or item.subj or ""
 		row.itemName = Auction:ItemNameOf(item)
@@ -187,6 +202,7 @@ local function updateRow(row, item)
 		row.Cells.e:SetText(Auction:ValueText(item))
 	else
 		row.entry = nil
+		row.bucket = item
 		row.itemName = item.name
 		row.itemLink = item.link
 		row.Cells.a:SetText(item.name or "")
