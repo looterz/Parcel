@@ -113,7 +113,37 @@ local function createRow(parent)
 		end
 	end)
 
+	row:SetScript("OnEnter", function(self)
+		if not self.itemName then return end
+
+		GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+
+		-- Resolved on hover rather than on every refresh, so a list of two
+		-- hundred rows costs nothing until you point at one.
+		local link = self.itemLink or Auction:LinkForName(self.itemName)
+		if link then
+			GameTooltip:SetHyperlink(link)
+		else
+			GameTooltip:SetText(self.itemName, 1, 1, 1)
+			GameTooltip:AddLine("Parcel has not seen this item itself yet.", 0.7, 0.7, 0.7, true)
+		end
+
+		GameTooltip:Show()
+	end)
+	row:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
 	return row
+end
+
+local function colourByQuality(cell, link)
+	local quality = link and select(3, C_Item.GetItemInfo(link)) or nil
+	if not quality then
+		cell:SetTextColor(1, 1, 1)
+		return
+	end
+
+	local r, g, b = C_Item.GetItemQualityColor(quality)
+	cell:SetTextColor(r or 1, g or 1, b or 1)
 end
 
 local function layoutCells(row)
@@ -135,16 +165,19 @@ local function updateRow(row, item)
 	if mode == "sales" then
 		row.entry = item
 		local invoice = item.invoice
-		local name = (invoice and invoice.item)
-			or (item.items and item.items[1] and item.items[1].name)
-			or Auction:ItemFromSubject(item.subj) or item.subj or ""
+		local name = Auction:ItemNameOf(item) or item.subj or ""
+		row.itemName = Auction:ItemNameOf(item)
+		row.itemLink = row.itemName and Auction:ItemLinkOf(item) or nil
+
 		local units = Auction:UnitsOf(item)
+		local shown = name
 		if units > 1 then
-			name = ("%s x%d"):format(name, units)
+			shown = ("%s x%d"):format(name, units)
 		end
 
 		row.Cells.a:SetText(item.at and date("%d %b %H:%M", item.at) or "")
-		row.Cells.b:SetText(name)
+		row.Cells.b:SetText(shown)
+		colourByQuality(row.Cells.b, row.itemLink)
 
 		local label, colour = Auction:ResultOf(item)
 		row.Cells.c:SetText(label)
@@ -154,7 +187,10 @@ local function updateRow(row, item)
 		row.Cells.e:SetText(Auction:ValueText(item))
 	else
 		row.entry = nil
+		row.itemName = item.name
+		row.itemLink = item.link
 		row.Cells.a:SetText(item.name or "")
+		colourByQuality(row.Cells.a, item.link)
 		row.Cells.b:SetText(tostring(item.sales or 0))
 		row.Cells.c:SetText(tostring(item.units or 0))
 		row.Cells.d:SetText(ns.Money(item.net or 0))
@@ -346,10 +382,19 @@ local function build(host)
 		local colour = profit > 0 and "|cff40ff40" or profit < 0 and "|cffff5050" or nil
 		local shown = Auction:FormatSigned(profit)
 		self.Tiles.pnl.Value:SetText(colour and (colour .. shown .. "|r") or shown)
-		self.Tiles.pnl.Note:SetText("sales less buying")
+		local withVendor = Auction:CountsVendor() and (summary.vendor or 0) > 0
+		self.Tiles.pnl.Note:SetText(withVendor and "sales and vendor, less buying"
+			or "sales less buying")
 		self.Tiles.pnl.exactText = ns.Money(profit)
-		self.Tiles.pnl.detailText = ("%s earned from sales, less %s spent buying."):format(
-			ns.Money(summary.net), ns.Money(summary.spent))
+
+		if withVendor then
+			self.Tiles.pnl.detailText = ("%s earned from sales and %s taken at vendors, less %s spent buying. %s of the vendor gold closed out auction buys."):format(
+				ns.Money(summary.net), ns.Money(summary.vendor),
+				ns.Money(summary.spent), ns.Money(summary.vendorFromAuction))
+		else
+			self.Tiles.pnl.detailText = ("%s earned from sales, less %s spent buying."):format(
+				ns.Money(summary.net), ns.Money(summary.spent))
+		end
 
 		self.Tiles.fees.Value:SetText(shortMoney(summary.fees))
 		self.Tiles.fees.Note:SetText(summary.gross > 0
@@ -370,9 +415,16 @@ local function build(host)
 			and "Nothing archived yet.\nAuction mail is recorded as you collect it."
 			or "No auction sales in this period.")
 
-		self.Footer:SetText(("%d sold (%d units)  ·  %d bought  ·  %d expired  ·  %d cancelled  ·  %d outbid, %s refunded"):format(
+		local footer = ("%d sold (%d units)  ·  %d bought  ·  %d expired  ·  %d cancelled  ·  %d outbid, %s refunded"):format(
 			summary.sold, summary.units, summary.bought,
-			summary.expired, summary.cancelled, summary.outbid, ns.Money(summary.refunded)))
+			summary.expired, summary.cancelled, summary.outbid, ns.Money(summary.refunded))
+
+		if (summary.vendorUnits or 0) > 0 then
+			footer = footer .. ("  ·  %d vendored for %s"):format(
+				summary.vendorUnits, ns.Money(summary.vendor))
+		end
+
+		self.Footer:SetText(footer)
 
 		Window:SetSummary("")
 	end

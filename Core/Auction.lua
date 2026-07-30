@@ -75,6 +75,7 @@ function Auction:Summary(seconds, character)
 		sold = 0, units = 0, gross = 0, deposits = 0, fees = 0, net = 0,
 		bought = 0, spent = 0,
 		expired = 0, cancelled = 0, outbid = 0, refunded = 0,
+		vendor = 0, vendorUnits = 0, vendorFromAuction = 0, vendorCost = 0,
 	}
 
 	for _, entry in ipairs(self:Entries(seconds, nil, character)) do
@@ -101,11 +102,70 @@ function Auction:Summary(seconds, character)
 		end
 	end
 
-	-- What the period actually left you with: sales net of the house, less what
-	-- you spent buying.
-	summary.profit = summary.net - summary.spent
+	local vendor, vendorUnits, fromAuction, vendorCost = self:VendorTotals(seconds, character)
+	summary.vendor = vendor
+	summary.vendorUnits = vendorUnits
+	summary.vendorFromAuction = fromAuction
+	summary.vendorCost = vendorCost
+
+	-- What the period actually left you with: sales net of the house, plus
+	-- anything vendored, less what you spent buying. Buying under the vendor
+	-- price and selling the difference is only a profit if this half counts.
+	summary.profit = summary.net + (self:CountsVendor() and vendor or 0) - summary.spent
 
 	return summary
+end
+
+function Auction:CountsVendor()
+	local profile = ns.Addon and ns.Addon.db and ns.Addon.db.profile
+	local auction = profile and profile.auction
+	return not auction or auction.countVendor ~= false
+end
+
+-- Item ids that arrived as auction wins, so vendored gold can say how much of
+-- it closed out a purchase rather than clearing out quest loot.
+function Auction:BoughtIDs(character)
+	local bought = {}
+
+	for _, entry in ipairs(Archive:Search("", "in", character)) do
+		if entry.mtype == WON then
+			for _, item in ipairs(entry.items or {}) do
+				if item.id then bought[item.id] = true end
+			end
+		end
+	end
+
+	return bought
+end
+
+function Auction:VendorTotals(seconds, character)
+	if not ns.Vendor then return 0, 0, 0 end
+
+	local cutoff = seconds and (time() - seconds) or nil
+	local total, units, fromAuction, cost = 0, 0, 0, 0
+	local bought
+
+	for _, sale in ipairs(ns.Vendor:Entries()) do
+		if (not character or sale.char == character)
+			and (not cutoff or (sale.at or 0) >= cutoff) then
+			total = total + (sale.money or 0)
+			units = units + (sale.n or 1)
+
+			-- A sale matched to its purchase says so outright. Older records
+			-- only have the item id to go on.
+			if sale.cost then
+				fromAuction = fromAuction + (sale.money or 0)
+				cost = cost + sale.cost
+			else
+				bought = bought or self:BoughtIDs(character)
+				if sale.id and bought[sale.id] then
+					fromAuction = fromAuction + (sale.money or 0)
+				end
+			end
+		end
+	end
+
+	return total, units, fromAuction, cost
 end
 
 -- Ranked by what they actually earned, not by how many moved, because a stack
@@ -123,7 +183,8 @@ function Auction:TopItems(seconds, limit, character)
 
 			local bucket = byName[name]
 			if not bucket then
-				bucket = { name = name, sales = 0, units = 0, net = 0 }
+				bucket = { name = name, sales = 0, units = 0, net = 0,
+					link = self:ItemLinkOf(entry) }
 				byName[name] = bucket
 				order[#order + 1] = bucket
 			end
@@ -143,6 +204,38 @@ function Auction:TopItems(seconds, limit, character)
 	end
 
 	return order
+end
+
+-- What the mail was about, wherever the name happens to live.
+function Auction:ItemNameOf(entry)
+	if not entry then return nil end
+
+	local invoice = entry.invoice
+	local name = (invoice and invoice.item)
+		or (entry.items and entry.items[1] and entry.items[1].name)
+		or self:ItemFromSubject(entry.subj)
+
+	if name == "" then return nil end
+	return name
+end
+
+-- Something a tooltip can be drawn from. Mail still carrying the item has one
+-- outright; a sale has to go through the learned names.
+function Auction:ItemLinkOf(entry)
+	if not entry then return nil end
+
+	local first = entry.items and entry.items[1]
+	if first then
+		if first.l then return first.l end
+		if first.id then return "item:" .. first.id end
+	end
+
+	return self:LinkForName(self:ItemNameOf(entry))
+end
+
+function Auction:LinkForName(name)
+	if not name then return nil end
+	return ns.ItemNames and ns.ItemNames:LinkFor(name) or nil
 end
 
 local RESULTS = {

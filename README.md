@@ -70,6 +70,11 @@ Nothing else can tell you that.
 - Earned, sold, house cut and spent, by day, week, month, year or all time
 - Top sellers ranked by what they actually netted, not by how many moved
 - Every sale listed with the deposit and the cut broken out
+- Profit and loss counts the gold you take at a vendor, so buying under the
+  vendor price and selling the difference reads as the profit it is
+- Vendored items are matched back to the auction they were bought at, with one
+  line in chat when you leave the vendor
+- Item tooltips on everything you sold, even though the mail only carried gold
 - Per character, or across your whole account
 
 **Sending**

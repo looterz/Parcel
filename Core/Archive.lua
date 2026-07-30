@@ -97,19 +97,27 @@ end
 
 local function itemsFor(record)
 	local items = {}
+
 	for slot = 1, ATTACHMENTS_MAX_RECEIVE do
 		local link = GetInboxItemLink(record.index, slot)
-		if link then
-			local name, itemID, _, count, quality = GetInboxItem(record.index, slot)
+		local name, itemID, _, count, quality = GetInboxItem(record.index, slot)
+
+		-- The link arrives after the header it belongs to, so a slot can hold a
+		-- real item while the link for it is still missing. An id or a name is
+		-- enough to draw the thing later, and waiting for the link means a mail
+		-- collected in between is recorded as having carried nothing.
+		if link or itemID or name then
+			if link and ns.ItemNames then ns.ItemNames:Learn(link) end
 			items[#items + 1] = {
-				id = itemID or tonumber(link:match("item:(%d+)")),
-				l = Archive:LinkMatters(link) and link or nil,
+				id = itemID or (link and tonumber(link:match("item:(%d+)"))) or nil,
+				l = (link and Archive:LinkMatters(link)) and link or nil,
 				name = name,
 				n = count or 1,
 				q = quality,
 			}
 		end
 	end
+
 	return items
 end
 
@@ -154,8 +162,39 @@ local TOLERANCE = Mail.EXPIRY_TOLERANCE or 120
 -- looking at and the history kept saying it was still waiting.
 local indexCache, indexOwner
 
+local nameIDs, nameIDsOwner
+
 function invalidateIndex()
 	indexCache, indexOwner = nil, nil
+	nameIDs, nameIDsOwner = nil, nil
+end
+
+-- Mail that hands an item back carries the real thing, so its attachments say
+-- what an item of that name actually is. A sale only ever gives the name.
+local function itemIDsByName(archive)
+	if nameIDs and nameIDsOwner == archive then return nameIDs end
+
+	nameIDs = {}
+	nameIDsOwner = archive
+
+	for _, entry in ipairs(archive.entries) do
+		for _, item in ipairs(entry.items or {}) do
+			if item.name and item.id and not nameIDs[item.name] then
+				nameIDs[item.name] = item.id
+			end
+		end
+	end
+
+	return nameIDs
+end
+
+function Archive:ItemIDForName(name)
+	if type(name) ~= "string" or name == "" then return nil end
+
+	local archive = store()
+	if not archive then return nil end
+
+	return itemIDsByName(archive)[name]
 end
 
 local function index(archive)
@@ -259,7 +298,13 @@ function Archive:ApplyRecord(entry, record)
 	-- Attachments are re-read every pass because item data arrives from the
 	-- server after the header does, so the first look often has no names.
 	if record.itemCount > 0 then
-		entry.items = itemsFor(record)
+		local found = itemsFor(record)
+		-- Never trade a fuller answer for an emptier one. Item data trails the
+		-- header, so an early pass sees less than a later one, and a mail
+		-- drained in between would otherwise keep the early answer for good.
+		if #found >= #(entry.items or {}) then
+			entry.items = found
+		end
 	end
 
 	entry.invoice = entry.invoice or invoiceFor(record)

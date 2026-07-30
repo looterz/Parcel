@@ -128,6 +128,8 @@ local NOTES = table.concat({
 	"",
 	"Full bags only hold back mail carrying items. Gold needs nowhere to go, so auction sales are still collected.",
 	"",
+	"Gold you take at a vendor counts towards profit and loss on the Auctions tab, so buying under the vendor price and selling the difference reads as the profit it is.",
+	"",
 	"Parcel keeps as many bag slots free as you set under Collecting.",
 	"",
 	"A mailbox with more than a hundred mails is handed over in batches. Parcel asks for the rest and "
@@ -487,6 +489,68 @@ function Options:Build(addon)
 							return ("\nHolding %d entries, roughly %.0f KB."):format(
 								ns.Archive:Count(), ns.Archive:EstimateBytes() / 1024)
 						end,
+					},
+					vendor = {
+						type = "group",
+						order = 8,
+						inline = true,
+						name = "Vendor sales",
+						args = {
+							countVendor = {
+								type = "toggle",
+								order = 1,
+								width = "full",
+								name = "Count vendor gold in profit and loss",
+								desc = "Buying under the vendor price and selling the difference "
+									.. "only shows as a profit if the gold you take at a vendor "
+									.. "counts. Turn this off to measure the auction house alone.",
+								get = function()
+									local auction = ns.Addon.db.profile.auction
+									return not auction or auction.countVendor ~= false
+								end,
+								set = function(_, value)
+									ns.Addon.db.profile.auction = ns.Addon.db.profile.auction or {}
+									ns.Addon.db.profile.auction.countVendor = value
+									ns.Events:Trigger("Parcel.Vendor.Changed")
+								end,
+							},
+							announceVendor = {
+								type = "toggle",
+								order = 2,
+								width = "full",
+								name = "Report vendor runs in chat",
+								desc = "One line when you leave a vendor, giving what the run "
+									.. "made against what those items cost at auction.",
+								get = function()
+									local auction = ns.Addon.db.profile.auction
+									return not auction or auction.announceVendor ~= false
+								end,
+								set = function(_, value)
+									ns.Addon.db.profile.auction = ns.Addon.db.profile.auction or {}
+									ns.Addon.db.profile.auction.announceVendor = value
+								end,
+							},
+							wipeVendor = {
+								type = "execute",
+								order = 3,
+								name = "Clear vendor record",
+								desc = "Forgets every vendor sale Parcel has recorded.",
+								confirm = true,
+								confirmText = "Clear Parcel's record of vendor sales? This cannot be undone.",
+								func = function()
+									local removed = ns.Vendor:Forget()
+									ns.Addon:Print(("Cleared %d vendor sales."):format(removed))
+								end,
+							},
+							vendorSize = {
+								type = "description",
+								order = 3,
+								fontSize = "medium",
+								name = function()
+									return ("\nHolding %d vendor sales."):format(ns.Vendor:Count())
+								end,
+							},
+						},
 					},
 					alerts = {
 						type = "group",

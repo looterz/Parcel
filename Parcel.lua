@@ -36,6 +36,10 @@ local defaults = {
 		alerts = {
 			expiryDays = 3,
 		},
+		auction = {
+			countVendor = true,
+			announceVendor = true,
+		},
 		minimap = {
 			hide = false,
 		},
@@ -52,6 +56,7 @@ local defaults = {
 		recipients = {},
 		known = {},
 		archive = { entries = {} },
+		vendor = { entries = {} },
 		drafts = {},
 	},
 }
@@ -299,6 +304,11 @@ function Parcel:PrintDiagnostics()
 	table.sort(parts)
 	self:Print("History by state: " .. table.concat(parts, ", "))
 	self:Print(("Still waiting: %d received mails."):format(waiting))
+
+	local vendorTotal = ns.Auction:VendorTotals(nil, ns.Archive:CurrentCharacter())
+	self:Print(("Vendor sales: %d recorded, worth %s, counted in profit: %s."):format(
+		ns.Vendor:Count(), ns.Money(vendorTotal), tostring(ns.Auction:CountsVendor())))
+	self:Print(("Item names learned: %d."):format(ns.ItemNames:Count()))
 	self:Print(("Settles: %d by transaction, %d by handle, %d missed."):format(
 		stats.settledByLedger, stats.settledByHandle, stats.settleMissed))
 end

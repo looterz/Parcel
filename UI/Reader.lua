@@ -405,6 +405,28 @@ local function renderArchived(entry)
 		button:Show()
 		shown = index
 	end
+
+	-- Records from a build that dropped an attachment it could not read yet
+	-- have nothing in the list, but an auction mail still names what it was
+	-- about, and that is enough to show it.
+	if shown == 0 then
+		local name = ns.Auction:ItemNameOf(entry)
+		local link = name and ns.Auction:ItemLinkOf(entry) or nil
+		if name then
+			local button = frame.Slots[1]
+			local _, _, quality, _, _, _, _, _, _, texture = C_Item.GetItemInfo(link or name)
+
+			button.link = link
+			button.itemName = name
+			SetItemButtonTexture(button, texture or "Interface\\Icons\\INV_Misc_QuestionMark")
+			SetItemButtonCount(button, 0)
+			SetItemButtonQuality(button, quality)
+			button:Disable()
+			button:Show()
+			shown = 1
+		end
+	end
+
 	showSlots(shown)
 
 	local value = (entry.money or 0) + (entry.cod or 0)
