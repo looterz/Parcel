@@ -42,6 +42,7 @@ Queue.done = 0
 Queue.total = 0
 Queue.skipped = 0
 Queue.itemsTaken = 0
+Queue.heldBack = 0
 
 local driver = CreateFrame("Frame")
 driver:Hide()
@@ -179,6 +180,7 @@ function Queue:Start()
 	self.running = true
 	self.done = 0
 	self.skipped = 0
+	self.heldBack = 0
 	self.total = #self.pending
 	self.current = nil
 	self.entryAttempts = 0
@@ -224,7 +226,7 @@ function Queue:Stop(reason)
 	self:Clear()
 
 	local done, total, skipped = self.done, self.total, self.skipped
-	Events:Trigger("Parcel.Queue.Stopped", reason, done, total, skipped)
+	Events:Trigger("Parcel.Queue.Stopped", reason, done, total, skipped, self.heldBack)
 end
 
 function Queue:CompleteEntry()
@@ -270,6 +272,26 @@ function Queue:HasRoomFor(index, slot)
 		return true
 	end
 	return Mail:CanStackWith(index, slot)
+end
+
+-- Money needs nowhere to go, so a full inventory only rules out mail carrying
+-- items. Auction sales are the common case and they are money only.
+function Queue:CanTakeAttachments(record)
+	if not record then return false end
+	if (record.itemCount or 0) == 0 then return true end
+	if Compat:GetFreeBagSlots() > setting("keepFreeSlots") then return true end
+
+	local slot = Mail:GetTopAttachment(record.index, self.failedItems)
+	if not slot then return true end
+	return self:HasRoomFor(record.index, slot)
+end
+
+-- Left where it is because its attachments will not fit. The run carries on so
+-- that money only mail behind it is still collected.
+function Queue:HoldBack()
+	if not self.current then return end
+	self.heldBack = self.heldBack + 1
+	return self:CompleteEntry()
 end
 
 function Queue:Step()
@@ -329,8 +351,7 @@ function Queue:Step()
 		local slot = Mail:GetTopAttachment(record.index, self.failedItems)
 		if slot then
 			if not self:HasRoomFor(record.index, slot) then
-				self:Report("Stopping, your bags are full.")
-				return self:Stop("bags")
+				return self:HoldBack()
 			end
 			TakeInboxItem(record.index, slot)
 			self.itemsTaken = self.itemsTaken + 1
@@ -387,7 +408,6 @@ events:SetScript("OnEvent", function(_, event, ...)
 		-- rather than holding an index across an update.
 		Mail:Refresh()
 		if ns.Ledger then ns.Ledger:Observe(Mail:GetRecords()) end
-	if ns.Ledger then ns.Ledger:Observe(Mail:GetRecords()) end
 
 	elseif event == "UI_ERROR_MESSAGE" then
 		-- The payload is (message) on some clients and (errorType, message) on
@@ -396,8 +416,7 @@ events:SetScript("OnEvent", function(_, event, ...)
 			local value = select(i, ...)
 			if type(value) == "string" then
 				if value == ERR_INV_FULL then
-					Queue:Report("Stopping, your bags are full.")
-					Queue:Stop("bags")
+					Queue:HoldBack()
 				elseif value == ERR_ITEM_MAX_COUNT then
 					local record = Queue.current and Mail:Resolve(Queue.current.handle)
 					if record then

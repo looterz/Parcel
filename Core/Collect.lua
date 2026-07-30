@@ -52,8 +52,25 @@ local function eligible(record)
 	if record.isGM or record.cod > 0 then return false end
 	if not ns.Archive:IsComplete(record) then return false end
 	if not hasSomethingToTake(record) then return false end
+	-- Full bags rule out mail carrying items, not mail carrying only money.
+	if not Queue:CanTakeAttachments(record) then return false end
 	if filter and not filter(record) then return false end
 	return true
+end
+
+-- Mail a run has nothing wrong with beyond nowhere to put its attachments.
+local function heldForBags()
+	local count = 0
+
+	for _, record in ipairs(Mail:GetRecords()) do
+		if not (record.isGM or record.cod > 0) and ns.Archive:IsComplete(record)
+			and hasSomethingToTake(record) and not Queue:CanTakeAttachments(record)
+			and (not filter or filter(record)) then
+			count = count + 1
+		end
+	end
+
+	return count
 end
 
 local function eligibleCount()
@@ -227,7 +244,14 @@ function Collect:Finish()
 		end
 	end
 
+	local held = mailOpen and heldForBags() or 0
+
 	reportRun()
+
+	if held > 0 then
+		ns.Addon:Print(("Your bags are full, so %d mails holding items were left."):format(held))
+	end
+
 	collecting = false
 	refreshRounds = 0
 	pendingRounds = 0
@@ -358,10 +382,13 @@ events:SetScript("OnEvent", function(_, event, ...)
 	end
 end)
 
-Events:Register("Parcel.Queue.Stopped", function(reason, done, total, skipped)
+Events:Register("Parcel.Queue.Stopped", function(reason, done, total, skipped, heldBack)
 	if reason == "finished" then
 		if skipped and skipped > 0 then
 			ns.Addon:Print(("Skipped %d COD or Blizzard mails."):format(skipped))
+		end
+		if heldBack and heldBack > 0 and not collecting then
+			ns.Addon:Print(("Your bags are full, so %d mails holding items were left."):format(heldBack))
 		end
 		if collecting then
 			Collect:Continue()
@@ -380,9 +407,7 @@ Events:Register("Parcel.Queue.Stopped", function(reason, done, total, skipped)
 		announce()
 	end
 
-	if reason == "bags" then
-		ns.Addon:Print("Stopped, your bags are full.")
-	elseif reason == "timeout" then
+	if reason == "timeout" then
 		ns.Addon:Print("Stopped, the server stopped responding.")
 	end
 end)

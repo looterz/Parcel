@@ -45,8 +45,9 @@ Nothing else can tell you that.
 
 - One button empties the mailbox, gold and attachments, until nothing is left
 - Never automates cash on delivery or Blizzard mail
-- Stops before your bags fill, keeping as many slots free as you ask, and still
-  takes anything that tops up a stack you already carry
+- Full bags only hold back mail carrying items, so auction gold still comes in
+- Keeps as many bag slots free as you ask, and still takes anything that tops up
+  a stack you already carry
 - Handles mailboxes past the hundred mail cap, asking the server for the rest
 - Collect only what you want: auction sales, wins, expiries, cancellations,
   outbid notices, Postmaster mail and everything else are separate switches

@@ -126,7 +126,9 @@ local NOTES = table.concat({
 	heading("Worth knowing"),
 	"Cash on delivery and Blizzard mail are never collected automatically. Take those by hand.",
 	"",
-	"Collecting stops before your bags fill, keeping the number of slots free you set under Collecting.",
+	"Full bags only hold back mail carrying items. Gold needs nowhere to go, so auction sales are still collected.",
+	"",
+	"Parcel keeps as many bag slots free as you set under Collecting.",
 	"",
 	"A mailbox with more than a hundred mails is handed over in batches. Parcel asks for the rest and "
 		.. "carries on. Refresh nudges it, and the server rate limits that to once a minute.",
@@ -276,8 +278,9 @@ function Options:Build(addon)
 						type = "range",
 						order = 1,
 						name = "Keep bag slots free",
-						desc = "Collecting stops before your bags get this full. "
-							.. "Items that can top up a stack you already carry are still taken.",
+						desc = "Mail carrying items is left once your bags get this full. "
+							.. "Gold is always taken, and items that can top up a stack you "
+							.. "already carry are still collected.",
 						min = 0,
 						max = 30,
 						step = 1,
