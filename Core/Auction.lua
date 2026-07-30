@@ -31,6 +31,38 @@ local EXPIRED = "ahExpired"
 local CANCELLED = "ahCancelled"
 local OUTBID = "ahOutbid"
 
+local DEFAULT_PERIOD = "month"
+
+function Auction:IsPeriod(key)
+	for _, entry in ipairs(self.periods) do
+		if entry.key == key then return true end
+	end
+	return false
+end
+
+-- Read rather than mirrored in a local, so a period retired in a later build
+-- falls back instead of leaving the tab strip with nothing selected.
+function Auction:SavedPeriod()
+	local profile = ns.Addon and ns.Addon.db and ns.Addon.db.profile
+	local auction = profile and profile.auction
+	local key = auction and auction.period
+
+	if self:IsPeriod(key) then return key end
+	return DEFAULT_PERIOD
+end
+
+function Auction:RememberPeriod(key)
+	if not self:IsPeriod(key) then return false end
+
+	local profile = ns.Addon and ns.Addon.db and ns.Addon.db.profile
+	if not profile then return false end
+
+	profile.auction = profile.auction or {}
+	profile.auction.period = key
+
+	return true
+end
+
 function Auction:IsAuctionEntry(entry)
 	local kind = entry.mtype
 	return kind == SOLD or kind == WON or kind == EXPIRED or kind == CANCELLED or kind == OUTBID

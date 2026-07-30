@@ -271,12 +271,15 @@ end
 local function build(host)
 	local self = { frame = host }
 
+	period = Auction:SavedPeriod()
+
 	-- Period
 	self.Periods = {}
 	local previous
 	for _, entry in ipairs(Auction.periods) do
 		local tab = Kit:CreateTab(host, entry.label, 56, function()
 			period = entry.key
+			Auction:RememberPeriod(entry.key)
 			for _, other in ipairs(self.Periods) do
 				other:SetSelected(other.key == entry.key)
 			end
@@ -450,6 +453,16 @@ local function build(host)
 	end
 
 	function self:OnShow()
+		-- Re-read rather than trust the local: switching profile swaps the saved
+		-- value under a page that was built against the old one.
+		local saved = Auction:SavedPeriod()
+		if saved ~= period then
+			period = saved
+			for _, tab in ipairs(self.Periods) do
+				tab:SetSelected(tab.key == period)
+			end
+		end
+
 		self.Character:SetOptions(characterOptions())
 		if character == nil and self.Character:GetValue() == nil then
 			character = ns.Archive:CurrentCharacter()

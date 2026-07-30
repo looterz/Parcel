@@ -39,6 +39,7 @@ local defaults = {
 		auction = {
 			countVendor = true,
 			announceVendor = true,
+			period = "month",
 		},
 		minimap = {
 			hide = false,
