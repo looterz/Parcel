@@ -22,18 +22,23 @@ local FOOTER_HEIGHT = 40
 -- The width the list has in a default sized window. Used only until the frame
 -- has been through a layout pass and can report its own.
 local DEFAULT_LIST_WIDTH = 586
+-- The fate icon is anchored to the right edge of the row, so the columns stop
+-- short of it. Without this the Left column is right justified straight under
+-- the icon.
+local FATE_RESERVE = 22
 local COLUMN_LEFT = 48
 local COLUMNS = {
 	{ key = "sender", title = "From", width = 120 },
 	{ key = "subject", title = "Subject", flex = true, min = 160 },
-	{ key = "money", title = "Value", width = 120, justify = "RIGHT" },
-	{ key = "expires", title = "Left", width = 50, justify = "RIGHT" },
+	{ key = "money", title = "Value", width = 112, justify = "RIGHT" },
+	-- Never more than "30d" or "23h", so it needs far less than it had.
+	{ key = "expires", title = "Left", width = 34, justify = "RIGHT" },
 }
 
 -- Laid out once up front so the table is never read with a nil width. The
 -- flexible column has no width of its own until something measures it, and the
 -- headers are built before the list exists to be measured.
-Kit:LayoutColumns(COLUMNS, DEFAULT_LIST_WIDTH, COLUMN_LEFT)
+Kit:LayoutColumns(COLUMNS, DEFAULT_LIST_WIDTH - FATE_RESERVE, COLUMN_LEFT)
 
 -- Both ship on every flavor Parcel supports.
 local FATE_RETURN = "Interface\\ChatFrame\\ChatFrameExpandArrow"
@@ -590,7 +595,7 @@ local function build(host)
 		local width = list.view:GetWidth() or 0
 		if width <= 0 then return end
 
-		Kit:LayoutColumns(COLUMNS, width, COLUMN_LEFT)
+		Kit:LayoutColumns(COLUMNS, width - FATE_RESERVE, COLUMN_LEFT)
 
 		for _, column in ipairs(COLUMNS) do
 			local header = self.HeaderByKey[column.key]
@@ -685,7 +690,9 @@ local function build(host)
 				and ("|cffffcc00History mode|r  %d last seen waiting"):format(waiting)
 				or "|cffffcc00History mode|r")
 
-			self.Notice:SetText("|cffffcc00Not at a mailbox.|r Showing what Parcel last saw.")
+			-- The summary in the top right already says History mode, so the
+			-- rest of this only repeated it into a space too narrow to hold it.
+			self.Notice:SetText("|cffffcc00Not at a mailbox.|r")
 			self.Notice:Show()
 			self.SelectionText:SetText("")
 

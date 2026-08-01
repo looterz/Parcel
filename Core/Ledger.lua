@@ -42,8 +42,10 @@ function Ledger:Observe(records)
 			Archive.stats.incomplete = Archive.stats.incomplete + 1
 		else
 			local entry = Archive:AdoptExisting(record, takenThisPass)
+			local filed = false
 			if not entry then
 				entry = Archive:NewEntry(record)
+				filed = true
 			end
 
 			if entry then
@@ -60,6 +62,13 @@ function Ledger:Observe(records)
 				byRecord[record] = txn
 
 				Archive:ApplyRecord(entry, record)
+
+				-- Announced after ApplyRecord, not from NewEntry: a new entry is
+				-- an empty shell until then, with no subject and no type, and
+				-- anything waiting for a particular mail needs both.
+				if filed then
+					Events:Trigger("Parcel.Archive.Recorded", entry)
+				end
 			end
 		end
 	end

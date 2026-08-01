@@ -11,7 +11,7 @@ local WIDTH, HEIGHT = 640, 476
 local MIN_HEIGHT = 380
 local MAX_WIDTH, MAX_HEIGHT = 1400, 1000
 local PADDING = 18
-local CONTENT_TOP = 80
+local CONTENT_TOP = 94
 
 -- Flush to the left edge, where Blizzard's panel manager puts the mail frame.
 -- Parcel is wider than that frame and the reader opens to its right, so
@@ -118,6 +118,20 @@ function Window:Refresh()
 	end
 end
 
+function Window:RefreshPending()
+	if not frame or not frame.PendingLine then return end
+
+	local count, money = ns.Pending:Totals()
+	if count == 0 then
+		frame.PendingLine:Hide()
+		return
+	end
+
+	frame.PendingLine:SetText(("%d %s sold, waiting on the mail  ·  %s expected"):format(
+		count, count == 1 and "auction" or "auctions", ns.Money(money)))
+	frame.PendingLine:Show()
+end
+
 function Window:SetSummary(text)
 	if frame then
 		frame.Summary:SetText(text or "")
@@ -187,6 +201,32 @@ function Window:Build()
 	frame.Title:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING + 4, -18)
 	frame.Title:SetText("Parcel")
 
+	-- Under the title, where the eye already is when the window opens. Hidden
+	-- rather than blank when there is nothing on the way, so it never reads as
+	-- a thing that failed to load.
+	frame.PendingLine = Kit:CreateText(frame, "dim")
+	frame.PendingLine:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING + 5, -42)
+	frame.PendingLine:Hide()
+	frame.PendingLine:EnableMouse(true)
+	frame.PendingLine:SetScript("OnEnter", function(self)
+		local entries = ns.Pending:Entries()
+		if #entries == 0 then return end
+
+		GameTooltip:SetOwner(self, "ANCHOR_BOTTOMRIGHT")
+		GameTooltip:SetText("Sold, waiting on the mail", 1, 0.82, 0)
+		for _, entry in ipairs(entries) do
+			local what = entry.name or UNKNOWN
+			if (entry.n or 1) > 1 then
+				what = ("%s x%d"):format(what, entry.n)
+			end
+			GameTooltip:AddDoubleLine(what, ns.Money(ns.Pending:ValueOf(entry)), 1, 1, 1, 1, 1, 1)
+		end
+		GameTooltip:AddLine("Seen at the auction house. The gold is an estimate, "
+			.. "net of the house cut.", 0.7, 0.7, 0.7, true)
+		GameTooltip:Show()
+	end)
+	frame.PendingLine:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
 	frame.Summary = Kit:CreateText(frame, "dim", "RIGHT")
 	frame.Summary:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -PADDING - 30, -22)
 
@@ -202,7 +242,7 @@ function Window:Build()
 		if previous then
 			tab:SetPoint("LEFT", previous, "RIGHT", 4, 0)
 		else
-			tab:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING + 2, -48)
+			tab:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING + 2, -62)
 		end
 
 		previous = tab
@@ -224,9 +264,17 @@ function Window:Build()
 	frame.CloseButton:SetHeight(22)
 
 	frame.SettingsButton = Kit:CreateIconButton(frame, "Interface\\Icons\\INV_Misc_Gear_01", 14,
-		"Parcel settings", function()
+		function(tooltip)
+			tooltip:SetText("Parcel settings", 1, 1, 1)
+			tooltip:AddLine("Right-click to reset the window size and position", 0.7, 0.7, 0.7)
+		end, function(_, button)
+			if button == "RightButton" then
+				Window:ResetPosition()
+				return
+			end
 			ns.Addon:OpenOptions()
 		end)
+	frame.SettingsButton:RegisterForClicks("AnyUp")
 	frame.SettingsButton:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -PADDING - 2, -20)
 
 	-- Every way of closing this window ends up here, which is the point.
@@ -338,6 +386,7 @@ function Window:Show(key)
 
 	self:RestoreSize()
 	self:RestorePosition()
+	self:RefreshPending()
 	frame:Show()
 
 	self:Select(key or current and current.key or order[1])
@@ -381,4 +430,8 @@ end)
 
 Events:Register("Parcel.Theme.Changed", function()
 	Window:ApplyBlizzardMailVisibility()
+end)
+
+ns.Events:Register("Parcel.Pending.Changed", function()
+	Window:RefreshPending()
 end)

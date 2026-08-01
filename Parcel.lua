@@ -58,6 +58,7 @@ local defaults = {
 		known = {},
 		archive = { entries = {} },
 		vendor = { entries = {} },
+		pending = { entries = {} },
 		drafts = {},
 	},
 }

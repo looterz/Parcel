@@ -37,11 +37,18 @@ function Kit:CreateIconButton(parent, texture, size, tooltip, onClick)
 	icon:SetDesaturated(true)
 	button.Icon = icon
 
+	-- A function rather than a string where the lines are only known when the
+	-- cursor arrives, or where there is more than one of them.
 	button:SetScript("OnEnter", function(self)
 		icon:SetDesaturated(false)
 		if not tooltip then return end
+
 		GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-		GameTooltip:SetText(tooltip, 1, 1, 1)
+		if type(tooltip) == "function" then
+			tooltip(GameTooltip)
+		else
+			GameTooltip:SetText(tooltip, 1, 1, 1)
+		end
 		GameTooltip:Show()
 	end)
 	button:SetScript("OnLeave", function()

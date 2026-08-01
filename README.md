@@ -77,6 +77,8 @@ Nothing else can tell you that.
 - Vendored items are matched back to the auction they were bought at, with one
   line in chat when you leave the vendor
 - Item tooltips on everything you sold, even though the mail only carried gold
+- Knows what has sold but not yet arrived, and roughly what it is worth, from
+  what the auction house told you last time you were there
 - Per character, or across your whole account
 
 **Sending**
