@@ -181,6 +181,64 @@ local function textLength(text)
 	return strlenutf8 and strlenutf8(text) or #text
 end
 
+-- Anything the client draws rather than spells out. A mail subject carrying a
+-- texture, a colour code or a link is refused outright, which is what made a
+-- gold only mail impossible to send with the subject Parcel filled in: the
+-- coin icons are markup, so the server saw no subject at all.
+local function plainText(text)
+	if type(text) ~= "string" then return "" end
+
+	text = text:gsub("|[Tt]......-|[Tt]", "")
+	text = text:gsub("|A.-|a", "")
+	text = text:gsub("|c%x%x%x%x%x%x%x%x", "")
+	text = text:gsub("|r", "")
+	text = text:gsub("|H.-|h(.-)|h", "%1")
+	text = text:gsub("|n", " ")
+
+	return strtrim((text:gsub("%s+", " ")))
+end
+
+Send.plainText = plainText
+
+function Send:HasMarkup(text)
+	if type(text) ~= "string" then return false end
+	return text:find("|", 1, true) ~= nil
+end
+
+local GOLD = 10000
+local SILVER = 100
+
+-- A localised amount, but only if the locale spells it out. Some carry plural
+-- markers, which are markup like any other.
+local function amount(pattern, fallback, value)
+	if type(pattern) == "string" and not pattern:find("|", 1, true) then
+		local ok, text = pcall(string.format, pattern, value)
+		if ok then return text end
+	end
+	return fallback:format(value)
+end
+
+function Send:PlainMoney(copper)
+	copper = math.floor(tonumber(copper) or 0)
+
+	local gold = math.floor(copper / GOLD)
+	local silver = math.floor((copper % GOLD) / SILVER)
+	local units = copper % SILVER
+
+	local parts = {}
+	if gold > 0 then
+		parts[#parts + 1] = amount(GOLD_AMOUNT, "%d Gold", gold)
+	end
+	if silver > 0 then
+		parts[#parts + 1] = amount(SILVER_AMOUNT, "%d Silver", silver)
+	end
+	if units > 0 or #parts == 0 then
+		parts[#parts + 1] = amount(COPPER_AMOUNT, "%d Copper", units)
+	end
+
+	return table.concat(parts, " ")
+end
+
 -- What is attached, said in a way that fits a subject line. Nil when there is
 -- nothing attached.
 function Send:DescribeAttachments()
@@ -231,10 +289,10 @@ function Send:EffectiveSubject(subject)
 	-- Attachments first: what is in the mail says more than what it is worth,
 	-- and the gold is visible on the mail either way.
 	local attachments = self:DescribeAttachments()
-	if attachments then return attachments end
+	if attachments then return plainText(attachments) end
 
 	if self.mode == "money" and self.amount > 0 then
-		return GetMoneyString(self.amount)
+		return self:PlainMoney(self.amount)
 	end
 
 	return subject
@@ -259,6 +317,12 @@ function Send:Validate(recipient, subject)
 	end
 	if subject == "" then
 		return false, "Mail needs a subject."
+	end
+
+	-- Turns a silent refusal into an answer. The client accepts these into the
+	-- box and the server then throws the mail away.
+	if self:HasMarkup(subject) then
+		return false, "A subject cannot contain icons or links."
 	end
 
 	if self.mode == "cod" then
