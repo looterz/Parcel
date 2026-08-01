@@ -98,6 +98,8 @@ Nothing else can tell you that.
 - Holds off trade requests and guild charters while you are at a mailbox
 - Keybindings for opening Parcel, collecting, and jumping to history
 - Dark and Blizzard themes for the Parcel UI
+- Drag the bottom-right corner to resize the window, right-click it to put the
+  size and position back
 - Any feature can be switched off, and settings support profiles
 - Chat commands for everything, with a Help tab that documents them
 - One download covers Retail, Classic Era, Burning Crusade, Wrath, Cataclysm

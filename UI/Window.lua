@@ -8,6 +8,8 @@ local Theme = ns.Theme
 local Events = ns.Events
 
 local WIDTH, HEIGHT = 640, 476
+local MIN_HEIGHT = 380
+local MAX_WIDTH, MAX_HEIGHT = 1400, 1000
 local PADDING = 18
 local CONTENT_TOP = 80
 
@@ -143,6 +145,44 @@ function Window:Build()
 	frame:Hide()
 	tinsert(UISpecialFrames, "ParcelFrame")
 
+	-- Grows only. Below the default the columns and the button rows have
+	-- nowhere left to go, and a window that can be dragged into uselessness is
+	-- worse than one that cannot be dragged at all.
+	frame:SetResizable(true)
+	ns.Compat:SetResizeBounds(frame, WIDTH, MIN_HEIGHT, MAX_WIDTH, MAX_HEIGHT)
+
+	frame.Sizer = CreateFrame("Button", nil, frame)
+	frame.Sizer:SetSize(16, 16)
+	frame.Sizer:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -4, 4)
+	frame.Sizer:SetNormalTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
+	frame.Sizer:SetPushedTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down")
+	frame.Sizer:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
+	frame.Sizer:RegisterForClicks("AnyUp")
+	frame.Sizer:SetScript("OnMouseDown", function(_, button)
+		if button == "RightButton" then return end
+		frame:StartSizing("BOTTOMRIGHT")
+	end)
+	frame.Sizer:SetScript("OnMouseUp", function(_, button)
+		if button == "RightButton" then
+			-- Both, because a window dragged somewhere awkward is usually also
+			-- the wrong size, and reaching the settings to fix it is the thing
+			-- you are trying to avoid.
+			Window:ResetPosition()
+			return
+		end
+
+		frame:StopMovingOrSizing()
+		Window:SaveSize()
+		Window:SavePosition()
+	end)
+	frame.Sizer:SetScript("OnEnter", function(self)
+		GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+		GameTooltip:AddLine("Drag to resize", 1, 1, 1)
+		GameTooltip:AddLine("Right-click to reset the size and position", 0.7, 0.7, 0.7)
+		GameTooltip:Show()
+	end)
+	frame.Sizer:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
 	frame.Title = Kit:CreateText(frame, "title")
 	frame.Title:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING + 4, -18)
 	frame.Title:SetText("Parcel")
@@ -219,8 +259,44 @@ function Window:Build()
 		end
 	end)
 
+	self:RestoreSize()
 	self:RestorePosition()
 	return frame
+end
+
+function Window:SaveSize()
+	local addon = ns.Addon
+	if not addon or not addon.db or not frame then return end
+
+	addon.db.profile.ui.size = {
+		width = math.floor(frame:GetWidth() + 0.5),
+		height = math.floor(frame:GetHeight() + 0.5),
+	}
+end
+
+function Window:RestoreSize()
+	if not frame then return end
+
+	local addon = ns.Addon
+	local saved = addon and addon.db and addon.db.profile.ui.size
+
+	local width = saved and saved.width or WIDTH
+	local height = saved and saved.height or HEIGHT
+
+	-- Clamped on the way back in, so a size saved by a build with different
+	-- bounds cannot leave the window unusable.
+	frame:SetSize(
+		math.min(math.max(width, WIDTH), MAX_WIDTH),
+		math.min(math.max(height, MIN_HEIGHT), MAX_HEIGHT))
+end
+
+function Window:ResetSize()
+	local addon = ns.Addon
+	if addon and addon.db then
+		addon.db.profile.ui.size = nil
+	end
+
+	if frame then frame:SetSize(WIDTH, HEIGHT) end
 end
 
 function Window:SavePosition()
@@ -250,6 +326,8 @@ function Window:ResetPosition()
 		addon.db.profile.ui.position = {}
 	end
 
+	self:ResetSize()
+
 	if not frame then return end
 	frame:ClearAllPoints()
 	frame:SetPoint(DEFAULT_POINT[1], UIParent, DEFAULT_POINT[2], DEFAULT_POINT[3], DEFAULT_POINT[4])
@@ -258,6 +336,7 @@ end
 function Window:Show(key)
 	self:Build()
 
+	self:RestoreSize()
 	self:RestorePosition()
 	frame:Show()
 

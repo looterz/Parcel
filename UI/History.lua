@@ -12,13 +12,22 @@ local ROW_HEIGHT = 26
 local LIST_TOP = 78
 local FOOTER_HEIGHT = 28
 
+-- The width the list has in a default sized window. Used only until the frame
+-- has been through a layout pass and can report its own.
+local DEFAULT_LIST_WIDTH = 586
+local COLUMN_LEFT = 4
 local COLUMNS = {
-	{ key = "when", title = "When", x = 4, width = 92 },
-	{ key = "who", title = "From / To", x = 100, width = 112 },
-	{ key = "subject", title = "Subject", x = 216, width = 190 },
-	{ key = "value", title = "Value", x = 410, width = 100, justify = "RIGHT" },
-	{ key = "state", title = "", x = 514, width = 56, justify = "RIGHT" },
+	{ key = "when", title = "When", width = 92 },
+	{ key = "who", title = "From / To", width = 112 },
+	{ key = "subject", title = "Subject", flex = true, min = 150 },
+	{ key = "value", title = "Value", width = 100, justify = "RIGHT" },
+	{ key = "state", title = "", width = 56, justify = "RIGHT" },
 }
+
+-- Laid out once up front so the table is never read with a nil width. The
+-- flexible column has no width of its own until something measures it, and the
+-- headers are built before the list exists to be measured.
+Kit:LayoutColumns(COLUMNS, DEFAULT_LIST_WIDTH, COLUMN_LEFT)
 
 local FILTERS = {
 	{ key = "all", label = "All", direction = nil },
@@ -234,12 +243,13 @@ local function build(host)
 	end
 	self.Filters[1]:SetSelected(true)
 
+	local headers = {}
 	for _, column in ipairs(COLUMNS) do
 		if column.title ~= "" then
 			local header = Kit:CreateText(host, "dim", column.justify)
-			header:SetPoint("TOPLEFT", host, "TOPLEFT", column.x, -60)
-			header:SetWidth(column.width)
+			header:SetPoint("TOPLEFT", host, "TOPLEFT", column.x or 0, -60)
 			header:SetText(column.title)
+			headers[column.key] = header
 		end
 	end
 
@@ -252,6 +262,30 @@ local function build(host)
 	list:Fill(host, LIST_TOP, FOOTER_HEIGHT, 18)
 	list.bar:SetPoint("TOPRIGHT", host, "TOPRIGHT", 0, -LIST_TOP)
 	list.bar:SetPoint("BOTTOMRIGHT", host, "BOTTOMRIGHT", 0, FOOTER_HEIGHT)
+
+	local function relayout()
+		local width = list.view:GetWidth() or 0
+		if width <= 0 then return end
+
+		Kit:LayoutColumns(COLUMNS, width, COLUMN_LEFT)
+
+		for _, column in ipairs(COLUMNS) do
+			local header = headers[column.key]
+			if header then
+				header:ClearAllPoints()
+				header:SetPoint("TOPLEFT", host, "TOPLEFT", column.x, -60)
+				header:SetWidth(column.width)
+			end
+		end
+
+		for _, row in ipairs(list.rows) do
+			Kit:ApplyColumns(row, COLUMNS)
+		end
+	end
+
+	self.RelayoutColumns = relayout
+	list.view:HookScript("OnSizeChanged", relayout)
+	relayout()
 
 	self.Empty = Kit:CreateText(host, "dim", "CENTER")
 	self.Empty:SetPoint("CENTER", host, "CENTER", 0, 0)

@@ -255,8 +255,9 @@ function Options:Build(addon)
 						type = "execute",
 						order = 4,
 						name = "Reset window position",
-						desc = "Puts the Parcel window back where it started, "
-							.. "in case you have dragged it off screen.",
+						desc = "Puts the Parcel window back where it started, at its "
+							.. "original size, in case you have dragged it off screen "
+							.. "or resized it awkwardly.",
 						func = function() ns.Addon:ResetWindowPositions() end,
 					},
 				},

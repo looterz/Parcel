@@ -17,12 +17,23 @@ local LIST_TOP = 52
 local FOOTER_HEIGHT = 40
 
 -- x is the offset from the list's left edge, so moving a column is one number.
+-- Widths, not positions. Kit:LayoutColumns works the x out from whatever width
+-- the list actually has, and the subject takes the slack.
+-- The width the list has in a default sized window. Used only until the frame
+-- has been through a layout pass and can report its own.
+local DEFAULT_LIST_WIDTH = 586
+local COLUMN_LEFT = 48
 local COLUMNS = {
-	{ key = "sender", title = "From", x = 48, width = 120 },
-	{ key = "subject", title = "Subject", x = 172, width = 210 },
-	{ key = "money", title = "Value", x = 386, width = 120, justify = "RIGHT" },
-	{ key = "expires", title = "Left", x = 510, width = 50, justify = "RIGHT" },
+	{ key = "sender", title = "From", width = 120 },
+	{ key = "subject", title = "Subject", flex = true, min = 160 },
+	{ key = "money", title = "Value", width = 120, justify = "RIGHT" },
+	{ key = "expires", title = "Left", width = 50, justify = "RIGHT" },
 }
+
+-- Laid out once up front so the table is never read with a nil width. The
+-- flexible column has no width of its own until something measures it, and the
+-- headers are built before the list exists to be measured.
+Kit:LayoutColumns(COLUMNS, DEFAULT_LIST_WIDTH, COLUMN_LEFT)
 
 -- Both ship on every flavor Parcel supports.
 local FATE_RETURN = "Interface\\ChatFrame\\ChatFrameExpandArrow"
@@ -546,6 +557,7 @@ local function build(host)
 	self.Search:SetPoint("TOPRIGHT", host, "TOPRIGHT", -4, 0)
 
 	self.Headers = {}
+	self.HeaderByKey = {}
 	for _, column in ipairs(COLUMNS) do
 		local header = Kit:CreateColumnHeader(host, column.title, column.width, column.justify, function()
 			if sortKey == column.key then
@@ -556,9 +568,10 @@ local function build(host)
 			end
 			rebuild()
 		end)
-		header:SetPoint("TOPLEFT", host, "TOPLEFT", column.x, -32)
+		header:SetPoint("TOPLEFT", host, "TOPLEFT", column.x or 0, -32)
 		header.key = column.key
 		self.Headers[#self.Headers + 1] = header
+		self.HeaderByKey[column.key] = header
 	end
 
 	list = Kit:CreateScrollList(host, {
@@ -570,6 +583,32 @@ local function build(host)
 	list:Fill(host, LIST_TOP, FOOTER_HEIGHT, 18)
 	list.bar:SetPoint("TOPRIGHT", host, "TOPRIGHT", 0, -LIST_TOP)
 	list.bar:SetPoint("BOTTOMRIGHT", host, "BOTTOMRIGHT", 0, FOOTER_HEIGHT)
+
+	-- The list knows its own width before anything else does, and knows again
+	-- the moment the window is dragged.
+	local function relayout()
+		local width = list.view:GetWidth() or 0
+		if width <= 0 then return end
+
+		Kit:LayoutColumns(COLUMNS, width, COLUMN_LEFT)
+
+		for _, column in ipairs(COLUMNS) do
+			local header = self.HeaderByKey[column.key]
+			if header then
+				header:ClearAllPoints()
+				header:SetPoint("TOPLEFT", host, "TOPLEFT", column.x, -32)
+				header:SetWidth(column.width)
+			end
+		end
+
+		for _, row in ipairs(list.rows) do
+			Kit:ApplyColumns(row, COLUMNS)
+		end
+	end
+
+	self.RelayoutColumns = relayout
+	list.view:HookScript("OnSizeChanged", relayout)
+	relayout()
 
 	self.CollectButton = Kit:CreateButton(host, "Collect", 116, startCollect)
 	self.CollectButton:SetPoint("BOTTOMLEFT", host, "BOTTOMLEFT", 0, 0)

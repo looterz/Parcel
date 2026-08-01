@@ -167,6 +167,54 @@ function Kit:CreateText(parent, role, justify)
 	return text
 end
 
+-- Columns
+-- ---------------------------------------------------------------------------
+
+-- Positions are worked out rather than written down, so one table describes the
+-- default window and every size it can be dragged to. Widths are fixed except
+-- for the one marked flex, which takes whatever is left over. Without that the
+-- right hand column is right justified against a fixed edge and the one before
+-- it stops well short, leaving a gap that looks like a bug and is one.
+function Kit:LayoutColumns(columns, available, left, gap)
+	left = left or 0
+	gap = gap or 4
+
+	local fixed, flex = 0, nil
+	for _, column in ipairs(columns) do
+		if column.flex then
+			flex = column
+		else
+			fixed = fixed + (column.width or 0)
+		end
+	end
+
+	if flex then
+		local spacing = gap * (#columns - 1)
+		flex.width = math.max(flex.min or 80, available - left - fixed - spacing)
+	end
+
+	local x = left
+	for _, column in ipairs(columns) do
+		column.x = x
+		x = x + (column.width or 0) + gap
+	end
+
+	return columns
+end
+
+-- Re-anchors cells that already exist. Rows are recycled, so the ones built
+-- before a resize have to be moved rather than rebuilt.
+function Kit:ApplyColumns(row, columns, cells)
+	for _, column in ipairs(columns) do
+		local cell = cells and cells[column.key] or (row.Columns and row.Columns[column.key])
+		if cell then
+			cell:ClearAllPoints()
+			cell:SetPoint("LEFT", row, "LEFT", column.x, 0)
+			cell:SetWidth(column.width)
+		end
+	end
+end
+
 function Kit:CreateDivider(parent)
 	local texture = parent:CreateTexture(nil, "ARTWORK")
 	texture:SetHeight(1)

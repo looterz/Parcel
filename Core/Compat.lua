@@ -255,6 +255,26 @@ function Compat:HasTradeGoodsSubclasses()
 	return self.flavor ~= "vanilla"
 end
 
+-- SetResizeBounds is the current call on every flavor Parcel supports. The
+-- older SetMinResize and SetMaxResize pair is kept behind it because the mid
+-- Classic clients cannot be checked against a running game from here.
+function Compat:SetResizeBounds(frame, minWidth, minHeight, maxWidth, maxHeight)
+	if frame.SetResizeBounds then
+		frame:SetResizeBounds(minWidth, minHeight, maxWidth, maxHeight)
+		return true
+	end
+
+	if frame.SetMinResize then
+		frame:SetMinResize(minWidth, minHeight)
+		if frame.SetMaxResize and maxWidth and maxHeight then
+			frame:SetMaxResize(maxWidth, maxHeight)
+		end
+		return true
+	end
+
+	return false
+end
+
 -- Events
 -- ---------------------------------------------------------------------------
 

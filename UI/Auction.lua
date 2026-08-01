@@ -19,21 +19,31 @@ local MODES = {
 	{ key = "items", label = "Top items" },
 }
 
+-- The width the list has in a default sized window. Used only until the frame
+-- has been through a layout pass and can report its own.
+local DEFAULT_LIST_WIDTH = 586
+local COLUMN_LEFT = 4
 local COLUMNS = {
 	sales = {
-		{ key = "a", title = "When", x = 4, width = 92 },
-		{ key = "b", title = "Item", x = 100, width = 186 },
-		{ key = "c", title = "Result", x = 290, width = 84 },
-		{ key = "d", title = "Buyer", x = 378, width = 104 },
-		{ key = "e", title = "Net", x = 486, width = 96, justify = "RIGHT" },
+		{ key = "a", title = "When", width = 92 },
+		{ key = "b", title = "Item", flex = true, min = 140 },
+		{ key = "c", title = "Result", width = 84 },
+		{ key = "d", title = "Buyer", width = 104 },
+		{ key = "e", title = "Net", width = 96, justify = "RIGHT" },
 	},
 	items = {
-		{ key = "a", title = "Item", x = 4, width = 230 },
-		{ key = "b", title = "Sales", x = 238, width = 76, justify = "RIGHT" },
-		{ key = "c", title = "Units", x = 318, width = 130, justify = "RIGHT" },
-		{ key = "d", title = "Net", x = 452, width = 118, justify = "RIGHT" },
+		{ key = "a", title = "Item", flex = true, min = 160 },
+		{ key = "b", title = "Sales", width = 76, justify = "RIGHT" },
+		{ key = "c", title = "Units", width = 130, justify = "RIGHT" },
+		{ key = "d", title = "Net", width = 118, justify = "RIGHT" },
 	},
 }
+
+-- Laid out once up front so the table is never read with a nil width. The
+-- flexible column has no width of its own until something measures it, and the
+-- headers are built before the list exists to be measured.
+Kit:LayoutColumns(COLUMNS.sales, DEFAULT_LIST_WIDTH, COLUMN_LEFT)
+Kit:LayoutColumns(COLUMNS.items, DEFAULT_LIST_WIDTH, COLUMN_LEFT)
 
 local page
 local list
@@ -158,6 +168,14 @@ local function colourByQuality(cell, link)
 
 	local r, g, b = C_Item.GetItemQualityColor(quality)
 	cell:SetTextColor(r or 1, g or 1, b or 1)
+end
+
+-- The list knows its own width, and knows again the moment the window is
+-- dragged. Both modes are measured against it before anything is anchored.
+local function measureColumns()
+	local width = list and list.view and list.view:GetWidth() or 0
+	if width <= 0 then return end
+	Kit:LayoutColumns(COLUMNS[mode], width, COLUMN_LEFT)
 end
 
 local function layoutCells(row)
@@ -354,6 +372,7 @@ local function build(host)
 	end
 
 	function self:UpdateHeaders()
+		measureColumns()
 		for _, header in pairs(self.Headers) do header:Hide() end
 
 		for _, column in ipairs(COLUMNS[mode]) do
@@ -375,6 +394,10 @@ local function build(host)
 		updateRow = updateRow,
 	})
 	list:Fill(host, LIST_TOP, FOOTER_HEIGHT, 18)
+	list.view:HookScript("OnSizeChanged", function()
+		self:UpdateHeaders()
+		for _, row in ipairs(list.rows) do layoutCells(row) end
+	end)
 	list.bar:SetPoint("TOPRIGHT", host, "TOPRIGHT", 0, -LIST_TOP)
 	list.bar:SetPoint("BOTTOMRIGHT", host, "BOTTOMRIGHT", 0, FOOTER_HEIGHT)
 
