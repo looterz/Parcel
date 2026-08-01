@@ -258,6 +258,59 @@ end
 -- Attachments
 -- ---------------------------------------------------------------------------
 
+-- Attachment slots are not contiguous. A mail carrying five items can hold them
+-- in slots 1, 2, 5, 6 and 9, so anything that walks them has to pack the result
+-- rather than treat the slot number as a position.
+--
+-- Occupancy is HasInboxItem rather than a name from GetInboxItem, because the
+-- client sends the header before the item data behind it: a slot that is
+-- plainly full answers nil to everything else for a moment. Blizzard's own mail
+-- frame draws a question mark for exactly that gap.
+function Mail:HasAttachment(index, slot)
+	if HasInboxItem then
+		return HasInboxItem(index, slot) and true or false
+	end
+
+	return (GetInboxItemLink(index, slot) or GetInboxItem(index, slot)) ~= nil
+end
+
+-- Every occupied slot, packed, in slot order. Each carries the slot it really
+-- came from, because position in this list is not it.
+function Mail:Attachments(index)
+	local out = {}
+
+	for slot = 1, ATTACHMENTS_MAX_RECEIVE do
+		if self:HasAttachment(index, slot) then
+			local name, itemID, texture, count, quality = GetInboxItem(index, slot)
+			out[#out + 1] = {
+				slot = slot,
+				name = name,
+				id = itemID,
+				texture = texture,
+				count = count,
+				quality = quality,
+				link = GetInboxItemLink(index, slot),
+				loaded = name ~= nil,
+			}
+		end
+	end
+
+	return out
+end
+
+-- Whether anything in the mail can be named yet. A mail that says it carries
+-- attachments and cannot name one of them has not finished arriving.
+function Mail:AttachmentsReadable(index)
+	for slot = 1, ATTACHMENTS_MAX_RECEIVE do
+		if self:HasAttachment(index, slot) then
+			local name = GetInboxItem(index, slot)
+			if name then return true end
+		end
+	end
+
+	return false
+end
+
 -- Taking an attachment does not renumber the ones left behind, but a mail that
 -- arrives mid run does renumber the mails, so slots are always re-scanned rather
 -- than cached.
@@ -276,7 +329,7 @@ end
 function Mail:CountAttachments(index)
 	local count = 0
 	for slot = 1, ATTACHMENTS_MAX_RECEIVE do
-		if GetInboxItemLink(index, slot) then
+		if self:HasAttachment(index, slot) then
 			count = count + 1
 		end
 	end

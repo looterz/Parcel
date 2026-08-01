@@ -226,12 +226,16 @@ local function build()
 		-- A disabled Button drops OnEnter/OnLeave unless this is set, which is why
 		-- history attachments had no tooltip.
 		button:SetMotionScriptsWhileDisabled(true)
-		button:SetScript("OnClick", function() Reader:TakeSlot(slot) end)
+		-- Attachment slots are sparse, so these buttons are packed positions and
+		-- the slot each one is showing travels on the button itself.
+		button:SetScript("OnClick", function(self)
+			if self.slot then Reader:TakeSlot(self.slot) end
+		end)
 		button:SetScript("OnEnter", function(self)
 			GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
 			local current = record()
-			if current then
-				GameTooltip:SetInboxItem(current.index, slot)
+			if current and self.slot then
+				GameTooltip:SetInboxItem(current.index, self.slot)
 				if current.cod > 0 then
 					GameTooltip:AddLine(("Costs %s on take."):format(ns.Money(current.cod)), 1, 0.4, 0.4)
 				end
@@ -291,6 +295,8 @@ end
 -- Rendering
 -- ---------------------------------------------------------------------------
 
+local QUESTION_MARK = "Interface\\Icons\\INV_Misc_QuestionMark"
+
 local function showSlots(count)
 	for slot = count + 1, ATTACHMENTS_MAX_RECEIVE do
 		frame.Slots[slot]:Hide()
@@ -324,25 +330,25 @@ local function renderLive(current)
 		opened = time(),
 	}))
 
-	local shown = 0
-	for slot = 1, ATTACHMENTS_MAX_RECEIVE do
-		local button = frame.Slots[slot]
-		local name, itemID, texture, count, quality = GetInboxItem(current.index, slot)
+	-- Packed. Testing each slot for a name and then hiding everything above the
+	-- count drops any attachment sitting above a gap, which is why a mail of
+	-- five could show one.
+	local items = Mail:Attachments(current.index)
+	for position, item in ipairs(items) do
+		local button = frame.Slots[position]
 
-		if name then
-			button.link = GetInboxItemLink(current.index, slot)
-			button.itemName = name
-			SetItemButtonTexture(button, texture)
-			SetItemButtonCount(button, count or 0)
-			SetItemButtonQuality(button, quality, itemID)
-			button:Enable()
-			button:Show()
-			shown = shown + 1
-		else
-			button:Hide()
-		end
+		button.slot = item.slot
+		button.link = item.link
+		button.itemName = item.name
+		-- A slot whose data has not arrived still gets drawn, the way Blizzard
+		-- draws it, rather than leaving a hole that fills in a moment later.
+		SetItemButtonTexture(button, item.texture or QUESTION_MARK)
+		SetItemButtonCount(button, item.count or 0)
+		SetItemButtonQuality(button, item.quality, item.id)
+		button:Enable()
+		button:Show()
 	end
-	showSlots(shown)
+	showSlots(#items)
 
 	if current.money > 0 then
 		frame.Money:SetText("Take " .. ns.Money(current.money))
@@ -361,7 +367,7 @@ local function renderLive(current)
 	frame.TakeAll:Show()
 	frame.Reply:Show()
 	frame.Dispose:Show()
-	frame.TakeAll:SetEnabled(current.cod == 0 and (shown > 0 or current.money > 0))
+	frame.TakeAll:SetEnabled(current.cod == 0 and (#items > 0 or current.money > 0))
 	-- The auction house does not read mail. Classified by subject rather than
 	-- sender, so "Alliance Auction House" against "Horde Auction House" against
 	-- every translation of both never has to be enumerated.
@@ -394,6 +400,7 @@ local function renderArchived(entry)
 		local name, _, quality, _, _, _, _, _, _, texture = C_Item.GetItemInfo(item.id or 0)
 		-- The stored link carries enchants and suffixes; the bare item id is
 		-- the fallback for mail archived before links were kept.
+		button.slot = nil
 		button.link = item.l or (item.id and ("item:" .. item.id)) or nil
 		button.itemName = item.name or name
 

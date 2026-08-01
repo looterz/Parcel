@@ -98,22 +98,19 @@ end
 local function itemsFor(record)
 	local items = {}
 
-	for slot = 1, ATTACHMENTS_MAX_RECEIVE do
-		local link = GetInboxItemLink(record.index, slot)
-		local name, itemID, _, count, quality = GetInboxItem(record.index, slot)
-
-		-- The link arrives after the header it belongs to, so a slot can hold a
-		-- real item while the link for it is still missing. An id or a name is
-		-- enough to draw the thing later, and waiting for the link means a mail
-		-- collected in between is recorded as having carried nothing.
-		if link or itemID or name then
+	-- Packed by Mail:Attachments, because the slots are sparse. A slot with
+	-- nothing known about it yet is skipped: IsComplete holds the whole mail
+	-- back until at least one of them can be named.
+	for _, attachment in ipairs(Mail:Attachments(record.index)) do
+		local link = attachment.link
+		if link or attachment.id or attachment.name then
 			if link and ns.ItemNames then ns.ItemNames:Learn(link) end
 			items[#items + 1] = {
-				id = itemID or (link and tonumber(link:match("item:(%d+)"))) or nil,
+				id = attachment.id or (link and tonumber(link:match("item:(%d+)"))) or nil,
 				l = (link and Archive:LinkMatters(link)) and link or nil,
-				name = name,
-				n = count or 1,
-				q = quality,
+				name = attachment.name,
+				n = attachment.count or 1,
+				q = attachment.quality,
 			}
 		end
 	end
@@ -335,6 +332,14 @@ function Archive:IsComplete(record)
 	if not record.subject or record.subject == "" then return false end
 
 	if RETRIEVING_DATA and (record.subject == RETRIEVING_DATA or record.sender == RETRIEVING_DATA) then
+		return false
+	end
+
+	-- The item data arrives after the header carrying it. A mail that says it
+	-- has attachments and cannot name a single one has not finished arriving,
+	-- and filing it now records it as having carried nothing at all, which is
+	-- permanent once it is collected.
+	if (record.itemCount or 0) > 0 and not Mail:AttachmentsReadable(record.index) then
 		return false
 	end
 
