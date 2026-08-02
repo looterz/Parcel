@@ -108,31 +108,70 @@ function Pending:Record(id, name, count, price)
 	return true
 end
 
+-- A sale claimed on another machine leaves no trace in this one. The mail
+-- arrived and was emptied somewhere else, so nothing here ever hears about it
+-- and the record sits there claiming gold is on the way for days.
+--
+-- The auction house is the one place that still knows. A sold listing stays in
+-- your own list until its gold is claimed and then disappears, so a listing
+-- Parcel is waiting on that is no longer there has been dealt with, wherever
+-- that happened.
+--
+-- Only against a complete list. A partial one proves nothing: the listing could
+-- be on a page the client has not sent.
+function Pending:ReconcileAgainstListings(seen, complete)
+	if not complete then return 0 end
+
+	local pending = store()
+	if not pending then return 0 end
+
+	local character = characterName()
+	local cleared = 0
+
+	for index = #pending.entries, 1, -1 do
+		local entry = pending.entries[index]
+		if entry.char == character and not seen[entry.id] then
+			table.remove(pending.entries, index)
+			cleared = cleared + 1
+		end
+	end
+
+	if cleared > 0 then Events:Trigger("Parcel.Pending.Changed") end
+	return cleared
+end
+
 function Pending:ReadOwnedAuctions()
-	local found = 0
+	local found, seen, complete = 0, {}, false
 
 	if C_AuctionHouse and C_AuctionHouse.GetNumOwnedAuctions then
 		local sold = Enum and Enum.AuctionStatus and Enum.AuctionStatus.Sold or SOLD
+
+		-- The query answers with everything at once, so what is read here is
+		-- the whole list.
+		complete = true
 
 		for index = 1, (C_AuctionHouse.GetNumOwnedAuctions() or 0) do
 			local info = C_AuctionHouse.GetOwnedAuctionInfo(index)
 			if info and info.status == sold then
 				local price = info.buyoutAmount or info.bidAmount or 0
-				local itemName = info.itemKey and ns.ItemNames
-					and ns.ItemNames:LinkFor(info.itemName or "") or info.itemName
-				if self:Record(info.auctionID, info.itemName or itemName, info.quantity, price) then
+				seen[info.auctionID] = true
+				if self:Record(info.auctionID, info.itemName, info.quantity, price) then
 					found = found + 1
 				end
 			end
 		end
 
-		return found
+		return found, self:ReconcileAgainstListings(seen, complete)
 	end
 
-	if not (GetNumAuctionItems and GetAuctionItemInfo) then return 0 end
+	if not (GetNumAuctionItems and GetAuctionItemInfo) then return 0, 0 end
 
-	local shown = GetNumAuctionItems("owner")
-	for index = 1, (shown or 0) do
+	local shown, total = GetNumAuctionItems("owner")
+	shown = shown or 0
+	-- Paged, so the rest of the list may simply not have been sent yet.
+	complete = shown == (total or shown)
+
+	for index = 1, shown do
 		-- The owner list drops duration from the middle of the return, so these
 		-- are read positionally against Blizzard's own owner call rather than
 		-- the longer browse one.
@@ -144,11 +183,12 @@ function Pending:ReadOwnedAuctions()
 			-- No auction id on Classic, so the listing is identified by what it
 			-- is and what it went for.
 			local id = ("%s|%d|%d"):format(tostring(name), count or 1, price)
+			seen[id] = true
 			if self:Record(id, name, count, price) then found = found + 1 end
 		end
 	end
 
-	return found
+	return found, self:ReconcileAgainstListings(seen, complete)
 end
 
 -- Clearing

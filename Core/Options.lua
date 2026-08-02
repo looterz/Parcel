@@ -531,9 +531,24 @@ function Options:Build(addon)
 									ns.Addon.db.profile.auction.announceVendor = value
 								end,
 							},
-							wipeVendor = {
+							wipePending = {
 								type = "execute",
 								order = 3,
+								name = "Clear pending sales",
+								desc = "Forgets what Parcel thinks has sold and not yet arrived. "
+									.. "It relearns from your own listings next time you visit an "
+									.. "auction house, which is also where it corrects itself if "
+									.. "you collected the mail on another computer.",
+								confirm = true,
+								confirmText = "Clear what Parcel is waiting on? This cannot be undone.",
+								func = function()
+									local removed = ns.Pending:Forget()
+									ns.Addon:Print(("Cleared %d pending sales."):format(removed))
+								end,
+							},
+							wipeVendor = {
+								type = "execute",
+								order = 4,
 								name = "Clear vendor record",
 								desc = "Forgets every vendor sale Parcel has recorded.",
 								confirm = true,
