@@ -7,8 +7,13 @@ local Kit = ns.Kit
 local Theme = ns.Theme
 local Events = ns.Events
 
-local WIDTH, HEIGHT = 640, 476
-local MIN_HEIGHT = 380
+local WIDTH, HEIGHT = 640, 500
+
+-- Grows only, in both directions. The Send page stacks its fields downward
+-- while its buttons are pinned to the bottom of the content area, so anything
+-- shorter than this closes the gap between them. That is also why the default
+-- gained height when the pending line pushed the content down.
+local MIN_WIDTH, MIN_HEIGHT = WIDTH, HEIGHT
 local MAX_WIDTH, MAX_HEIGHT = 1400, 1000
 local PADDING = 18
 local CONTENT_TOP = 94
@@ -163,7 +168,7 @@ function Window:Build()
 	-- nowhere left to go, and a window that can be dragged into uselessness is
 	-- worse than one that cannot be dragged at all.
 	frame:SetResizable(true)
-	ns.Compat:SetResizeBounds(frame, WIDTH, MIN_HEIGHT, MAX_WIDTH, MAX_HEIGHT)
+	ns.Compat:SetResizeBounds(frame, MIN_WIDTH, MIN_HEIGHT, MAX_WIDTH, MAX_HEIGHT)
 
 	frame.Sizer = CreateFrame("Button", nil, frame)
 	frame.Sizer:SetSize(16, 16)
@@ -334,7 +339,7 @@ function Window:RestoreSize()
 	-- Clamped on the way back in, so a size saved by a build with different
 	-- bounds cannot leave the window unusable.
 	frame:SetSize(
-		math.min(math.max(width, WIDTH), MAX_WIDTH),
+		math.min(math.max(width, MIN_WIDTH), MAX_WIDTH),
 		math.min(math.max(height, MIN_HEIGHT), MAX_HEIGHT))
 end
 
