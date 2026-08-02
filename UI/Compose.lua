@@ -14,6 +14,10 @@ local Window = ns.Window
 local Events = ns.Events
 
 local SLOT_SIZE = 34
+-- Beside the twelve slots, which stop six across.
+local QUICK_LEFT = 6 * (34 + 6) + 14
+local QUICK_WIDTH, QUICK_HEIGHT = 150, 20
+local QUICK_COLUMNS, QUICK_MAX = 2, 8
 local SLOTS_PER_ROW = 6
 
 local page
@@ -149,6 +153,42 @@ local function build(host)
 	self.MoneyRadio = Kit:CreateRadio(host, "Send money", function()
 		Send:SetMode("money")
 	end)
+	-- Quick attach, in the space beside the slots. Two rows of six leaves most
+	-- of the width empty, which is where these go.
+	self.QuickLabel = Kit:CreateText(host, "dim")
+	self.QuickLabel:SetPoint("TOPLEFT", attachLabel, "TOPLEFT", QUICK_LEFT, 0)
+	self.QuickLabel:SetText("Quick attach")
+	self.QuickLabel:Hide()
+
+	self.QuickButtons = {}
+	for index = 1, QUICK_MAX do
+		local column = (index - 1) % QUICK_COLUMNS
+		local row = math.floor((index - 1) / QUICK_COLUMNS)
+
+		local button = Kit:CreateButton(host, "", QUICK_WIDTH, function()
+			local group = self.QuickButtons[index].group
+			if not group then return end
+
+			local attached, refused, full = Send:AttachTradeGoods(group.subclass)
+			if attached > 0 then
+				self:Refresh()
+			end
+
+			if full then
+				ns.Addon:Print(("Attached %d, and the mail is full."):format(attached))
+			elseif refused > 0 then
+				ns.Addon:Print(("Attached %d, left %d that cannot be mailed."):format(
+					attached, refused))
+			end
+		end)
+		button:SetHeight(QUICK_HEIGHT)
+		button:SetPoint("TOPLEFT", attachLabel, "BOTTOMLEFT",
+			QUICK_LEFT + column * (QUICK_WIDTH + 4), -6 - row * (QUICK_HEIGHT + 4))
+		button:Hide()
+
+		self.QuickButtons[index] = button
+	end
+
 	self.MoneyRadio:SetPoint("TOPLEFT", firstSlot, "BOTTOMLEFT", 0, -14 - (SLOT_SIZE + 6))
 
 	self.CodRadio = Kit:CreateRadio(host, "Cash on delivery", function()
@@ -274,9 +314,31 @@ local function build(host)
 		self:Refresh()
 	end
 
+	function self:RefreshQuickAttach()
+		local groups = Send:TradeGoodsInBags()
+
+		for index, button in ipairs(self.QuickButtons) do
+			local group = groups[index]
+			button.group = group
+
+			if group then
+				local stacks = #group.items
+				button:SetText(("%s  (%d)"):format(group.label, stacks))
+				button:SetEnabled(Send:HasRoom())
+				button:Show()
+			else
+				button:Hide()
+			end
+		end
+
+		self.QuickLabel:SetShown(groups[1] ~= nil)
+	end
+
 	function self:Refresh()
 		-- What will actually be sent if the subject is left blank, and the label
 		-- when there is nothing to fill in.
+		self:RefreshQuickAttach()
+
 		local auto = Send:EffectiveSubject("")
 		self.Subject:SetPlaceholder(auto ~= "" and auto or "Subject")
 

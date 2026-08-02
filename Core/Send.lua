@@ -63,7 +63,11 @@ local scanner
 local function scanTooltip()
 	if not scanner then
 		scanner = CreateFrame("GameTooltip", "ParcelScanTooltip", nil, "GameTooltipTemplate")
-		scanner:SetOwner(UIParent, "ANCHOR_NONE")
+		-- WorldFrame, not UIParent. A scanning tooltip that shares an anchor
+		-- ancestor with the real GameTooltip corrupts it while it is showing
+		-- something that refreshes on a timer: weapon imbues, buffs, bag items
+		-- that are still tradeable. Parentless is not enough on its own.
+		scanner:SetOwner(WorldFrame, "ANCHOR_NONE")
 	end
 	return scanner
 end
@@ -117,6 +121,128 @@ function Send:AttachFromBag(bag, slot)
 
 	announce()
 	return true
+end
+
+-- Quick attach
+-- ---------------------------------------------------------------------------
+
+-- Blizzard's own auction categories carry the comment "SubClasses Added in
+-- TBC", and on Classic Era the trade goods category is a flat filter. Rather
+-- than gate on the flavor, the grouping asks the client to name the subclass of
+-- what is actually in the bags: a client that names nothing useful yields one
+-- group, and one that does yields real ones. No table of ids per flavor either
+-- way.
+local TRADE_GOODS = 7
+
+-- Nothing has come close to this many, and the loop stops at the first gap only
+-- if the ids were contiguous, which they are not.
+local MAX_SUBCLASS = 24
+
+-- Everything under one heading, where subclasses say nothing useful.
+local FLAT = -1
+Send.FLAT_TRADE_GOODS = FLAT
+
+function Send:TradeGoodsClass()
+	return (Enum and Enum.ItemClass and Enum.ItemClass.Tradegoods) or TRADE_GOODS
+end
+
+-- Discovered by asking the client to name each one rather than written down per
+-- flavor. The set grows with every expansion, and a hardcoded table stops
+-- covering new materials without anyone noticing it has.
+local subclassNames
+
+function Send:TradeGoodsSubclasses()
+	if subclassNames then return subclassNames end
+
+	subclassNames = {}
+	if not GetItemSubClassInfo then return subclassNames end
+
+	local class = self:TradeGoodsClass()
+	for id = 0, MAX_SUBCLASS do
+		local name = GetItemSubClassInfo(class, id)
+		if name and name ~= "" then subclassNames[id] = name end
+	end
+
+	return subclassNames
+end
+
+-- Discovered once per session. Nothing about the client's answer changes while
+-- it is running, so this only exists for tests that stand in for another one.
+function Send:ForgetTradeGoodsSubclasses()
+	subclassNames = nil
+end
+
+-- What is in the bags right now, grouped by material. Only groups holding
+-- something, because a row of empty buttons is worse than no row.
+--
+-- Soulbound items are not filtered out here. The cheap test is only available
+-- on newer clients and the fallback reads a tooltip per item, which is too much
+-- to spend on every refresh of the page. Attaching refuses them instead.
+function Send:TradeGoodsInBags()
+	local class = self:TradeGoodsClass()
+	local names = self:TradeGoodsSubclasses()
+	local groups, order = {}, {}
+
+	ns.Compat:ForEachBag(function(bag)
+		local slots = C_Container.GetContainerNumSlots(bag) or 0
+
+		for slot = 1, slots do
+			local link = C_Container.GetContainerItemLink(bag, slot)
+			if link then
+				local itemClass, subclass = ns.Compat:GetItemClass(link)
+				if itemClass == class then
+					local key = names[subclass] and subclass or FLAT
+					local group = groups[key]
+
+					if not group then
+						group = {
+							subclass = key,
+							label = names[key] or (GetItemClassInfo and GetItemClassInfo(class))
+								or "Trade Goods",
+							items = {},
+						}
+						groups[key] = group
+						order[#order + 1] = group
+					end
+
+					local info = ns.Compat:GetContainerItemInfo(bag, slot)
+					group.items[#group.items + 1] = {
+						bag = bag,
+						slot = slot,
+						name = link:match("|h%[(.-)%]|h"),
+						count = (info and (info.stackCount or info.itemCount)) or 1,
+					}
+				end
+			end
+		end
+	end)
+
+	table.sort(order, function(left, right) return left.label < right.label end)
+	return order
+end
+
+-- Attaching empties the bag slot it came from and leaves every other slot where
+-- it was, so a list gathered up front stays valid all the way through.
+function Send:AttachTradeGoods(subclass)
+	local attached, refused, full = 0, 0, false
+
+	for _, group in ipairs(self:TradeGoodsInBags()) do
+		if group.subclass == subclass then
+			for _, item in ipairs(group.items) do
+				if not self:HasRoom() then
+					full = true
+					break
+				end
+				if self:AttachFromBag(item.bag, item.slot) then
+					attached = attached + 1
+				else
+					refused = refused + 1
+				end
+			end
+		end
+	end
+
+	return attached, refused, full
 end
 
 function Send:ClearAttachments()
@@ -242,16 +368,21 @@ end
 -- What is attached, said in a way that fits a subject line. Nil when there is
 -- nothing attached.
 function Send:DescribeAttachments()
-	local names, attached = {}, 0
+	local kinds, totals, attached = {}, {}, 0
 
 	for index = 1, ATTACHMENTS_MAX_SEND do
 		if HasSendMailItem(index) then
 			attached = attached + 1
 			local name, _, _, quantity = GetSendMailItem(index)
 			if name and name ~= "" then
-				names[#names + 1] = (quantity or 1) > 1
-					and ("%s x%d"):format(name, quantity)
-					or name
+				-- The same item in several slots is one thing in three stacks,
+				-- not three things. Counted together, listed once, in the order
+				-- the slots run.
+				if not totals[name] then
+					kinds[#kinds + 1] = name
+					totals[name] = 0
+				end
+				totals[name] = totals[name] + (quantity or 1)
 			end
 		end
 	end
@@ -259,15 +390,22 @@ function Send:DescribeAttachments()
 	if attached == 0 then return nil end
 	-- Names arrive with the item data, so a slot the client has not caught up
 	-- with yet still gets counted.
-	if #names == 0 then return ("%d items"):format(attached) end
+	if #kinds == 0 then return ("%d items"):format(attached) end
+
+	local function say(name)
+		local total = totals[name]
+		return total > 1 and ("%s x%d"):format(name, total) or name
+	end
 
 	local text
-	if #names == 1 then
-		text = names[1]
-	elseif #names == 2 then
-		text = ("%s, %s"):format(names[1], names[2])
+	if #kinds == 1 then
+		text = say(kinds[1])
+	elseif #kinds == 2 then
+		text = ("%s, %s"):format(say(kinds[1]), say(kinds[2]))
 	else
-		text = ("%s, %s and %d more"):format(names[1], names[2], #names - 2)
+		-- More kinds, not more slots: two stacks of the same thing already
+		-- folded into one of these.
+		text = ("%s, %s and %d more"):format(say(kinds[1]), say(kinds[2]), #kinds - 2)
 	end
 
 	-- A truncated item name reads worse than a plain count.

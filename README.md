@@ -85,6 +85,8 @@ Nothing else can tell you that.
 
 - Autocomplete from your own characters, past recipients, guild and friends
 - Twelve attachments, gold or cash on delivery, postage shown before you commit
+- Quick attach buttons for trade goods, grouped by material and only for what
+  you are actually carrying
 - Send gold with no subject and the amount becomes the subject
 - Remembers who you last wrote to, without ever overwriting a reply
 - Refuses soulbound items with a reason instead of failing silently

@@ -249,12 +249,6 @@ function Compat:GetItemClass(item)
 	return classID, subClassID
 end
 
--- Classic Era reports every trade good as Trade Goods with no subclass, so the
--- per material attach buttons cannot exist there.
-function Compat:HasTradeGoodsSubclasses()
-	return self.flavor ~= "vanilla"
-end
-
 -- SetResizeBounds is the current call on every flavor Parcel supports. The
 -- older SetMinResize and SetMaxResize pair is kept behind it because the mid
 -- Classic clients cannot be checked against a running game from here.
