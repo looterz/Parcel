@@ -37,6 +37,7 @@ local DEFAULTS = {
 
 Queue.pending = {}
 Queue.failedItems = {}
+Queue.leftBehind = 0
 Queue.running = false
 Queue.done = 0
 Queue.total = 0
@@ -196,6 +197,7 @@ function Queue:Start()
 	self.done = 0
 	self.skipped = 0
 	self.heldBack = 0
+	self.leftBehind = 0
 	self.total = #self.pending
 	self.current = nil
 	self.entryAttempts = 0
@@ -241,7 +243,26 @@ function Queue:Stop(reason)
 	self:Clear()
 
 	local done, total, skipped = self.done, self.total, self.skipped
-	Events:Trigger("Parcel.Queue.Stopped", reason, done, total, skipped, self.heldBack)
+	Events:Trigger("Parcel.Queue.Stopped", reason, done, total, skipped, self.heldBack, self.leftBehind)
+end
+
+-- Whether the mail this entry was working on is genuinely finished with: gone
+-- from the mailbox, or still there holding nothing.
+--
+-- A run gives up on a mail it cannot empty, and until now it filed that as
+-- collected anyway. Mail holding several of something you can only carry one
+-- of is the case that shows it: the queue correctly refuses the rest, the mail
+-- stays in the mailbox with its items, and the record said it had been taken.
+--
+-- When the answer is not obvious this errs towards still waiting. A record
+-- wrongly saying waiting is corrected the next time Parcel sees the mailbox;
+-- one wrongly saying collected is never revisited.
+function Queue:Emptied(entry)
+	local record = entry.txn and ns.Ledger:RecordFor(entry.txn) or Mail:Resolve(entry.handle)
+	if not record then return true end
+
+	if (record.money or 0) > 0 then return false end
+	return Mail:CountAttachments(record.index) == 0
 end
 
 function Queue:CompleteEntry()
@@ -260,17 +281,38 @@ function Queue:CompleteEntry()
 
 	-- The archive needs to know what happened to this mail, and only the queue
 	-- knows whether it was drained, returned or deleted.
+	--
+	-- Returning and deleting recorded themselves when the action was issued and
+	-- the mail goes either way. Draining has to have actually drained: a mail
+	-- holding something the server refuses is still sitting there.
+	local finished = entry and (entry.kind == "return" or entry.kind == "delete"
+		or self:Emptied(entry)) or false
+
 	if entry then
 		if ns.Ledger then
 			if entry.txn then
-				ns.Ledger:Settle(entry.txn, DISPOSITION_FOR[entry.kind])
+				-- Returning and deleting already recorded themselves when the
+				-- action was issued, and the mail goes whether or not this can
+				-- still see it. Draining has to have actually drained.
+				if finished then
+					ns.Ledger:Settle(entry.txn, DISPOSITION_FOR[entry.kind])
+				else
+					-- Taking was recorded when the click went out. It did not
+					-- happen, so that has to come back off.
+					ns.Ledger:Unsettle(entry.txn)
+					self.leftBehind = self.leftBehind + 1
+				end
 			else
 				-- No transaction means the mail was never observed as complete
 				-- before it was acted on, which is worth knowing about.
 				ns.Archive.stats.settleMissed = ns.Archive.stats.settleMissed + 1
 			end
 		end
-		Events:Trigger("Parcel.Queue.Completed", entry.kind, entry.handle)
+		-- Both settle paths are deliberate redundancy, but they have to agree
+		-- about whether anything happened, or one undoes the other.
+		if finished then
+			Events:Trigger("Parcel.Queue.Completed", entry.kind, entry.handle)
+		end
 	end
 
 	Events:Trigger("Parcel.Queue.Progress", self.done, self.total)

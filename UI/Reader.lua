@@ -178,6 +178,17 @@ local function build()
 	cross:SetAllPoints()
 	cross:SetText("x")
 
+	-- Red on hover, the way every close control in the client behaves. The
+	-- resting colour is read back off the palette rather than written down,
+	-- since the theme owns it and can change under this.
+	frame.CloseX:SetScript("OnEnter", function()
+		cross:SetTextColor(1, 0.24, 0.24)
+	end)
+	frame.CloseX:SetScript("OnLeave", function()
+		local colour = Kit:GetPalette().dim
+		cross:SetTextColor(colour[1], colour[2], colour[3])
+	end)
+
 	local topDivider = Kit:CreateDivider(frame)
 	topDivider:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, -74)
 	topDivider:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -PADDING, -74)

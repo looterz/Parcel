@@ -113,7 +113,18 @@ local function describe(money, items)
 	return table.concat(parts, " and ")
 end
 
+-- Mail a pass could not empty because the server refuses the items in it, which
+-- a quest item or a unique reagent does once you carry one. Accumulated across
+-- the run, because the queue counter resets on every pass.
+local runLeftBehind = 0
+
+local function mailsHold(count)
+	if count == 1 then return "1 mail holds" end
+	return ("%d mails hold"):format(count)
+end
+
 local function beginRun()
+	runLeftBehind = 0
 	runMoney = GetMoney()
 	runItems = Queue.itemsTaken
 end
@@ -207,7 +218,12 @@ function Collect:Continue()
 	-- to do better on the next pass, and re-queueing it is an infinite loop. The
 	-- realistic cause is an item the server keeps refusing.
 	if remaining > 0 and remaining == lastEligible then
-		ns.Addon:Print(("Stopping, %d mails would not empty."):format(remaining))
+		if runLeftBehind > 0 then
+			ns.Addon:Print(("Stopping. %s items you cannot carry more of."):format(
+				mailsHold(remaining)))
+		else
+			ns.Addon:Print(("Stopping, %d mails would not empty."):format(remaining))
+		end
 		return self:Finish()
 	end
 
@@ -251,6 +267,7 @@ function Collect:Finish()
 	if held > 0 then
 		ns.Addon:Print(("Your bags are full, so %d mails holding items were left."):format(held))
 	end
+
 
 	collecting = false
 	refreshRounds = 0
@@ -382,10 +399,15 @@ events:SetScript("OnEvent", function(_, event, ...)
 	end
 end)
 
-Events:Register("Parcel.Queue.Stopped", function(reason, done, total, skipped, heldBack)
+Events:Register("Parcel.Queue.Stopped", function(reason, done, total, skipped, heldBack, leftBehind)
 	if reason == "finished" then
+		runLeftBehind = runLeftBehind + (leftBehind or 0)
+
 		if skipped and skipped > 0 then
 			ns.Addon:Print(("Skipped %d COD or Blizzard mails."):format(skipped))
+		end
+		if leftBehind and leftBehind > 0 and not collecting then
+			ns.Addon:Print(("%s items you cannot carry more of."):format(mailsHold(leftBehind)))
 		end
 		if heldBack and heldBack > 0 and not collecting then
 			ns.Addon:Print(("Your bags are full, so %d mails holding items were left."):format(heldBack))

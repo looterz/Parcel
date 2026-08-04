@@ -109,6 +109,22 @@ function Ledger:Settle(txn, disposition)
 	return true
 end
 
+-- Taking an item is recorded the moment the click is issued, so a run that
+-- stops halfway still leaves an honest record of what it took. When the server
+-- then refuses the item, that optimism has to be taken back: the mail is still
+-- sitting there holding it.
+function Ledger:Unsettle(txn)
+	if not txn or not txn.entry then return false end
+
+	-- Not manual: this is Parcel correcting its own guess, not the player
+	-- saying something about the mail.
+	Archive:SetDisposition(txn.entry, "inbox", false)
+	txn.entry.dispAt = nil
+	txn.state = "committed"
+
+	return true
+end
+
 -- Mail Parcel watched leave the mailbox without an outcome ever being recorded.
 -- Both settle paths can miss, and a mail can also leave without the queue being
 -- the one that emptied it. Either way it is no longer waiting.
