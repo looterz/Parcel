@@ -324,7 +324,7 @@ local function build(host)
 			if group then
 				local stacks = #group.items
 				button:SetText(("%s  (%d)"):format(group.label, stacks))
-				button:SetEnabled(Send:HasRoom())
+				button:SetEnabled(Send:HasRoom() and not Send:IsLocked())
 				button:Show()
 			else
 				button:Hide()

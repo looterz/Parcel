@@ -17,9 +17,17 @@ local MAX_COD = (MAX_COD_AMOUNT or 10000) * (COPPER_PER_GOLD or 10000)
 Send.mode = "money"
 Send.amount = 0
 Send.sending = false
+Send.locked = false
 
 local function announce()
 	Events:Trigger("Parcel.Send.Changed")
+end
+
+-- The server is holding one slot until the player answers a refund warning.
+-- Blizzard blanks its whole attachment area while that is up rather than
+-- working out which slot is which, so Parcel does the same.
+function Send:IsLocked()
+	return self.locked and true or false
 end
 
 -- Attachments
@@ -48,11 +56,13 @@ end
 -- one. With an empty cursor and an occupied slot this lifts the item out, which
 -- is exactly how Blizzard's own attachment buttons behave.
 function Send:ClickSlot(index, rightClick)
+	if self:IsLocked() then return end
 	ClickSendMailItemButton(index, rightClick and true or false)
 	announce()
 end
 
 function Send:AttachCursor()
+	if self:IsLocked() then return end
 	ClickSendMailItemButton()
 	announce()
 end
@@ -100,6 +110,10 @@ function Send:IsSoulbound(bag, slot)
 end
 
 function Send:AttachFromBag(bag, slot)
+	if self:IsLocked() then
+		return false, "Answer the refund warning first."
+	end
+
 	if not self:HasRoom() then return false end
 
 	if self:IsSoulbound(bag, slot) then
@@ -246,6 +260,8 @@ function Send:AttachTradeGoods(subclass)
 end
 
 function Send:ClearAttachments()
+	if self:IsLocked() then return end
+
 	for index = ATTACHMENTS_MAX_SEND, 1, -1 do
 		if HasSendMailItem(index) then
 			ClickSendMailItemButton(index, true)
@@ -441,6 +457,10 @@ function Send:Validate(recipient, subject)
 		return false, "Already sending."
 	end
 
+	if self:IsLocked() then
+		return false, "Answer the refund warning first."
+	end
+
 	recipient = strtrim(recipient or "")
 	subject = self:EffectiveSubject(subject)
 
@@ -577,25 +597,23 @@ events:SetScript("OnEvent", function(_, event, ...)
 		announce()
 
 	elseif event == "MAIL_LOCK_SEND_ITEMS" then
-		-- Mailing something still refundable forfeits the refund, and the
-		-- confirmation for that lives in Blizzard's frame, which Parcel hides.
-		-- Raising it here keeps the warning the player is entitled to.
-		local slot, itemLink = ...
-		if StaticPopupDialogs and StaticPopupDialogs["CONFIRM_MAIL_ITEM_UNREFUNDABLE"] then
-			local name, _, quality, _, _, _, _, _, _, texture = C_Item.GetItemInfo(itemLink)
-			local r, g, b = C_Item.GetItemQualityColor(quality or 1)
-			StaticPopup_Show("CONFIRM_MAIL_ITEM_UNREFUNDABLE", nil, nil, {
-				texture = texture,
-				name = name,
-				color = { r, g, b, 1 },
-				link = itemLink,
-				slot = slot,
-			})
-		end
+		-- Do not raise CONFIRM_MAIL_ITEM_UNREFUNDABLE here. Blizzard's mail
+		-- frame is parented away rather than unloaded, so its own is already up,
+		-- and showing that dialog twice reuses the frame and runs the first
+		-- one's OnCancel, which answers the server with a no. Parcel only owes
+		-- the handshake a page that will not send until the player answers.
+		local slot = ...
+		Send.locked = slot or true
+		announce()
 
 	elseif event == "MAIL_UNLOCK_SEND_ITEMS" then
-		if StaticPopup_Hide then
-			StaticPopup_Hide("CONFIRM_MAIL_ITEM_UNREFUNDABLE")
-		end
+		Send.locked = false
+		announce()
 	end
+end)
+
+-- Walking away takes the warning down without answering it, so a lock kept past
+-- that would leave the page refusing to send for the rest of the session.
+Events:Register("Parcel.Mail.Closed", function()
+	Send.locked = false
 end)
