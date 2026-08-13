@@ -231,6 +231,24 @@ local function rebuild()
 	if page then page:UpdateChrome() end
 end
 
+-- The row under the one a handle came from, in the order the list is showing
+-- rather than inbox order. The second return says whether that mail was found
+-- at all, which is what tells "it was the last one" apart from "it is not in
+-- this list any more".
+function Inbox:NextAfter(handle)
+	if not handle or not liveMode() then return nil, false end
+
+	for index, record in ipairs(visible) do
+		if not record.archived and Mail:Matches(record, handle) then
+			local following = visible[index + 1]
+			if following and not following.archived then return following, true end
+			return nil, true
+		end
+	end
+
+	return nil, false
+end
+
 -- Actions on a single mail
 -- ---------------------------------------------------------------------------
 

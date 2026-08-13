@@ -22,6 +22,7 @@ local BODY_HEIGHT = 132
 
 local frame
 local handle
+local nextHandle
 local archived
 local pendingSlot
 local selfDriven = false
@@ -378,14 +379,14 @@ local function renderLive(current)
 	frame.TakeAll:Show()
 	frame.Reply:Show()
 	frame.Dispose:Show()
-	frame.TakeAll:SetEnabled(current.cod == 0 and (#items > 0 or current.money > 0))
 	-- The auction house does not read mail. Classified by subject rather than
 	-- sender, so "Alliance Auction House" against "Horde Auction House" against
 	-- every translation of both never has to be enumerated.
 	frame.Reply:SetEnabled(current.canReply and not current.isGM
 		and not Mail:IsAuction(current.mailType))
 	frame.Dispose:SetText(InboxItemCanDelete(current.index) and DELETE or MAIL_RETURN)
-	frame.Dispose:SetEnabled(true)
+
+	Reader:UpdateActions()
 end
 
 local function renderArchived(entry)
@@ -473,6 +474,56 @@ local function renderArchived(entry)
 	end
 end
 
+-- Only the buttons. A run ending does not always come with an inbox update to
+-- redraw on, and it is not a reason to decide the mail has gone.
+function Reader:UpdateActions()
+	if not frame or archived then return end
+
+	local current = record()
+	if not current then return end
+
+	-- The reader is the one place a second run can be asked for while the first
+	-- is still going, now that it stays open past finishing a mail.
+	local running = ns.Queue:IsRunning()
+
+	frame.TakeAll:SetEnabled(not running and current.cod == 0
+		and (Mail:CountAttachments(current.index) > 0 or current.money > 0))
+	frame.Dispose:SetEnabled(not running)
+end
+
+-- Reading on
+-- ---------------------------------------------------------------------------
+
+local function readsOn()
+	local profile = ns.Addon and ns.Addon.db and ns.Addon.db.profile
+	local collect = profile and profile.collect
+	return not collect or collect.readNext ~= false
+end
+
+-- Taken while the mail being read is still in the list, because once it is gone
+-- there is no position left to count from.
+local function rememberNext()
+	if not ns.Inbox or not ns.Inbox.NextAfter then return end
+
+	local following, found = ns.Inbox:NextAfter(handle)
+	if found then
+		nextHandle = following and Mail:GetHandle(following) or nil
+	end
+end
+
+-- The mail under the one just finished with. False when there is none, which
+-- leaves the panel closing the way it always did.
+function Reader:Advance()
+	if archived or not readsOn() then return false end
+	if not ns.Collect:IsMailOpen() then return false end
+
+	local following = nextHandle and Mail:Resolve(nextHandle) or nil
+	if not following then return false end
+
+	self:Open(following)
+	return true
+end
+
 function Reader:Refresh()
 	if not frame then return end
 
@@ -483,10 +534,11 @@ function Reader:Refresh()
 
 	local current = record()
 	if not current then
-		self:Close()
+		if not self:Advance() then self:Close() end
 		return
 	end
 
+	rememberNext()
 	renderLive(current)
 end
 
@@ -522,6 +574,8 @@ function Reader:TakeMoney()
 end
 
 function Reader:TakeAll()
+	if ns.Queue:IsRunning() then return end
+
 	local current = record()
 	if not current or current.cod > 0 then return end
 
@@ -554,6 +608,8 @@ function Reader:Reply()
 end
 
 function Reader:Dispose()
+	if ns.Queue:IsRunning() then return end
+
 	local current = record()
 	if not current then return end
 
@@ -563,7 +619,7 @@ function Reader:Dispose()
 	ns.Queue:Start()
 	selfDriven = false
 
-	self:Close()
+	if not self:Advance() then self:Close() end
 end
 
 -- Lifecycle
@@ -575,6 +631,7 @@ function Reader:Open(target)
 	build()
 	archived = nil
 	handle = Mail:GetHandle(target)
+	nextHandle = nil
 
 	place()
 	frame:Show()
@@ -610,6 +667,7 @@ end
 
 function Reader:Close()
 	handle = nil
+	nextHandle = nil
 	archived = nil
 	pendingSlot = nil
 	if frame then frame:Hide() end
@@ -630,6 +688,10 @@ Events:Register("Parcel.Queue.Started", function()
 	if Reader:IsOpen() and not archived and not selfDriven then
 		Reader:Close()
 	end
+end)
+
+Events:Register("Parcel.Queue.Stopped", function()
+	if Reader:IsOpen() then Reader:UpdateActions() end
 end)
 
 local watcher = CreateFrame("Frame")

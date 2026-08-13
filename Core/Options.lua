@@ -94,6 +94,10 @@ local SHORTCUTS = table.concat({
 	"The icon at the end of each row says what happens to that mail when it runs out, "
 		.. "and clicking it does that now.",
 	"",
+	"Finishing with the mail you are reading opens the next one down the list, so a mailbox can be "
+		.. "worked through without going back to it each time. The last one closes the panel. "
+		.. "Collecting can turn this off.",
+	"",
 	key("Shift-click Collect") .. " takes everything, ignoring your filters for that one run.",
 	"",
 	heading("Minimap button"),
@@ -314,6 +318,15 @@ function Options:Build(addon)
 						desc = "Auction invoices keep their body text, so the server leaves the empty "
 							.. "mail behind after you take the money. This clears them out. Only ever "
 							.. "applies to mail Parcel has just emptied itself.",
+					},
+					readNext = {
+						type = "toggle",
+						order = 5,
+						width = "double",
+						name = "Open the next mail after this one",
+						desc = "Finishing with the mail you are reading, by emptying it, deleting it "
+							.. "or returning it, opens the next one down the list. The last mail "
+							.. "closes the panel the way it always has.",
 					},
 					filters = {
 						type = "group",
