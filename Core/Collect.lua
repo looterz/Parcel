@@ -92,9 +92,10 @@ end
 
 -- Measured against GetMoney rather than added up from each mail's headline
 -- amount, because a run that stops early on bag space has not taken everything
--- it was queued for and the totals would overstate it.
+-- it was queued for and the totals would overstate it. Only across a run, where
+-- Parcel is the thing acting: over a whole mailbox visit the same subtraction
+-- picks up every other copper that moved and has no way to tell whose it was.
 local runMoney, runItems
-local sessionMoney, sessionReported
 
 local function verbose()
 	local addon = ns.Addon
@@ -137,8 +138,6 @@ local function reportRun()
 	runMoney, runItems = nil, nil
 
 	if money <= 0 and items <= 0 then return end
-
-	sessionReported = (sessionReported or 0) + math.max(0, money)
 
 	if verbose() then
 		ns.Addon:Print("Collected " .. describe(money, items) .. ".")
@@ -329,7 +328,8 @@ function Collect:ReturnRecords(records)
 	local queued = 0
 	for _, record in ipairs(records) do
 		if not record.isGM and record.cod == 0 and record.canReply and not record.wasReturned then
-			if Queue:Push("return", record) then
+			-- Asked for by hand, so a mail Parcel cannot file is still returned.
+			if Queue:Push("return", record, true) then
 				queued = queued + 1
 			end
 		end
@@ -362,8 +362,6 @@ local function mailOpened()
 	mailOpen = true
 	-- A fresh visit always starts clean, whatever state the last one was left in.
 	Collect:Reset()
-	sessionMoney = GetMoney()
-	sessionReported = 0
 	Mail:Refresh()
 	Events:Trigger("Parcel.Mail.Opened")
 end
@@ -372,17 +370,6 @@ local function mailClosed()
 	mailOpen = false
 	Mail:ResetExpiryAnchors()
 	reportRun()
-
-	-- Anything taken by hand in the reader never went through a run, so the
-	-- session total covers what the per-run lines missed.
-	if sessionMoney and verbose() then
-		local unreported = (GetMoney() - sessionMoney) - (sessionReported or 0)
-		if unreported > 0 then
-			ns.Addon:Print("Also took " .. ns.Money(unreported) .. " by hand.")
-		end
-	end
-	sessionMoney, sessionReported = nil, nil
-
 	Collect:Reset()
 	Events:Trigger("Parcel.Mail.Closed")
 end

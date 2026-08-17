@@ -209,27 +209,50 @@ end
 -- Bags
 -- ---------------------------------------------------------------------------
 
+-- The bags you are carrying, and only those. The reagent bag is Retail only and
+-- NUM_TOTAL_EQUIPPED_BAG_SLOTS counts it, which is how Blizzard's own bag code
+-- tells the clients that have one apart. Asking Enum.BagIndex.ReagentBag
+-- instead is not the same question: that id is a bank bag on the Classic
+-- clients, and counting one as carried is counting room the mail cannot use.
+function Compat:LastBagSlot()
+	return NUM_TOTAL_EQUIPPED_BAG_SLOTS or NUM_BAG_SLOTS
+end
+
 function Compat:ForEachBag(callback)
-	for bag = 0, NUM_BAG_SLOTS do
+	for bag = 0, self:LastBagSlot() do
 		if callback(bag) == false then return end
 	end
+end
 
-	local reagentBag = Enum and Enum.BagIndex and Enum.BagIndex.ReagentBag
-	if type(reagentBag) == "number" then
-		callback(reagentBag)
+-- What the client's own counter says, which is the number on the backpack
+-- button and the one a player means by full.
+function Compat:ReportedFreeBagSlots()
+	if C_Container.CalculateTotalNumberOfFreeBagSlots then
+		return C_Container.CalculateTotalNumberOfFreeBagSlots()
 	end
 end
 
 -- Only counts general purpose slots. A profession bag with room in it will not
 -- hold the random item we are about to pull out of a mail.
+--
+-- Never more than the client's own total either. Two ways of undercounting, and
+-- the smaller wins: a bag Parcel walks that the item cannot actually go in is
+-- room it does not have, and so is anything the walk reaches that the client
+-- does not count as carried at all.
 function Compat:GetFreeBagSlots()
 	local free = 0
 	self:ForEachBag(function(bag)
 		local count, family = C_Container.GetContainerNumFreeSlots(bag)
-		if family == 0 then
+		-- bagFamily is documented nilable on every flavor, and a bag that does
+		-- not say what it is takes anything.
+		if not family or family == 0 then
 			free = free + (count or 0)
 		end
 	end)
+
+	local reported = self:ReportedFreeBagSlots()
+	if reported then return math.min(free, reported) end
+
 	return free
 end
 

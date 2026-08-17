@@ -581,11 +581,17 @@ function Reader:TakeAll()
 
 	-- Through the queue like everything else, so bag space and pacing are
 	-- handled the same way a full collect would handle them.
+	--
+	-- Not insisted on, unlike deleting. Taking without somewhere to write down
+	-- what was taken loses the record of it, and waiting a moment costs nothing
+	-- because the mail is not going anywhere.
 	selfDriven = true
 	ns.Queue:Clear()
-	ns.Queue:Push("drain", current)
-	ns.Queue:Start()
+	local queued, reason = ns.Queue:Push("drain", current)
+	if queued then ns.Queue:Start() end
 	selfDriven = false
+
+	if not queued and reason then ns.Addon:Print(reason) end
 end
 
 function Reader:Reply()
@@ -607,19 +613,39 @@ function Reader:Reply()
 	ns.Compose:Open(sender, subject)
 end
 
+-- Marked as the reader's own run so the panel is not taken down as though
+-- something else had started collecting.
+function Reader:Remove(kind, target)
+	selfDriven = true
+	ns.Queue:Clear()
+	local queued, reason = ns.Queue:Push(kind, target, true)
+	if queued then ns.Queue:Start() end
+	selfDriven = false
+
+	if not queued then
+		if reason then ns.Addon:Print(reason) end
+		return false
+	end
+
+	if not self:Advance() then self:Close() end
+	return true
+end
+
 function Reader:Dispose()
 	if ns.Queue:IsRunning() then return end
 
 	local current = record()
 	if not current then return end
 
-	selfDriven = true
-	ns.Queue:Clear()
-	ns.Queue:Push(InboxItemCanDelete(current.index) and "delete" or "return", current)
-	ns.Queue:Start()
-	selfDriven = false
+	-- Returning a mail is recoverable and deleting one is not, so only the
+	-- second asks, with the same dialog the row in the list asks with.
+	if not InboxItemCanDelete(current.index) then
+		return self:Remove("return", current)
+	end
 
-	if not self:Advance() then self:Close() end
+	ns.Inbox:ConfirmDelete(current, function(chosen)
+		Reader:Remove("delete", chosen)
+	end)
 end
 
 -- Lifecycle

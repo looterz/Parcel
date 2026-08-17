@@ -326,13 +326,22 @@ Archive.stats = {
 
 -- The client fills the inbox in stages, so a header can arrive before its
 -- sender and subject. Blizzard's own inbox falls back to UNKNOWN for display.
-function Archive:IsComplete(record)
-	if not record then return false end
-	if not record.sender or record.sender == "" then return false end
-	if not record.subject or record.subject == "" then return false end
+-- Why a mail does not count as having arrived, or nil once it has. IsComplete
+-- is this with the reason thrown away, so the verdict and the explanation
+-- cannot drift, and /parcel diag can say which test failed rather than only
+-- that one did.
+function Archive:WhyIncomplete(record)
+	if not record then return "no record" end
+	if not record.subject or record.subject == "" then return "no subject" end
 
+	-- No sender is not a mail still arriving. Mail from a creature has none at
+	-- all and never will, which is why Blizzard's own inbox substitutes UNKNOWN
+	-- for it rather than waiting. Requiring one here held every quest reward in
+	-- a pending state it could not leave, so it was never recorded and nothing
+	-- could delete or return it. A header that genuinely has not landed has no
+	-- subject either, and says so through RETRIEVING_DATA.
 	if RETRIEVING_DATA and (record.subject == RETRIEVING_DATA or record.sender == RETRIEVING_DATA) then
-		return false
+		return "still retrieving data"
 	end
 
 	-- The item data arrives after the header carrying it. A mail that says it
@@ -340,10 +349,14 @@ function Archive:IsComplete(record)
 	-- and filing it now records it as having carried nothing at all, which is
 	-- permanent once it is collected.
 	if (record.itemCount or 0) > 0 and not Mail:AttachmentsReadable(record.index) then
-		return false
+		return ("%d attachments, none readable"):format(record.itemCount)
 	end
 
-	return true
+	return nil
+end
+
+function Archive:IsComplete(record)
+	return self:WhyIncomplete(record) == nil
 end
 
 function Archive:CaptureInbox()

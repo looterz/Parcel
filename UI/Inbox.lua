@@ -278,7 +278,9 @@ local function returnOne(record)
 end
 
 -- Delete is the one action here with nothing behind it, so it asks first. The
--- handle is carried rather than the record because the popup outlives a refresh.
+-- handle is carried rather than the record because the popup outlives a
+-- refresh, and the deleter travels with it because the reader asks the same
+-- question and has its own work to do on the answer.
 StaticPopupDialogs["PARCEL_CONFIRM_DELETE"] = {
 	text = "Delete this mail permanently?\n\n|cffffd100%s|r",
 	button1 = YES,
@@ -288,23 +290,41 @@ StaticPopupDialogs["PARCEL_CONFIRM_DELETE"] = {
 	hideOnEscape = true,
 	preferredIndex = 3,
 	OnAccept = function(popup)
-		local record = Mail:Resolve(popup.data)
+		local data = popup.data
+		if not data or not data.deleter then return end
+
+		local record = Mail:Resolve(data.handle)
 		if not record then
 			ns.Addon:Print("That mail is no longer there.")
 			return
 		end
-		if Queue:Push("delete", record) then
-			Queue:Start()
-		end
+
+		data.deleter(record)
 	end,
 }
+
+function Inbox:ConfirmDelete(record, deleter)
+	local popup = StaticPopup_Show("PARCEL_CONFIRM_DELETE", record.subject or UNKNOWN)
+	if not popup then return false end
+
+	popup.data = { handle = Mail:GetHandle(record), deleter = deleter }
+	return true
+end
+
+local function deleteNow(record)
+	local pushed, reason = Queue:Push("delete", record, true)
+	if pushed then
+		Queue:Start()
+	elseif reason then
+		ns.Addon:Print(reason)
+	end
+end
 
 local function disposeOne(record)
 	if Queue:IsRunning() then return end
 
 	if InboxItemCanDelete(record.index) then
-		local popup = StaticPopup_Show("PARCEL_CONFIRM_DELETE", record.subject or UNKNOWN)
-		if popup then popup.data = Mail:GetHandle(record) end
+		Inbox:ConfirmDelete(record, deleteNow)
 		return
 	end
 

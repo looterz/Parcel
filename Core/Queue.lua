@@ -111,17 +111,25 @@ end
 -- Queue building
 -- ---------------------------------------------------------------------------
 
-function Queue:Push(kind, record)
+-- Returns queued, and a reason when it refuses. Every refusal used to be a bare
+-- false, so a player pressing Delete on a mail Parcel would not touch got no
+-- mail deleted and nothing said about why.
+--
+-- insist is for a button the player pressed. Without a transaction there is
+-- nowhere to write what happened, which is a good reason for a run to leave the
+-- mail for a later round and no reason at all to refuse an instruction: a mail
+-- Parcel cannot file is still a mail the player is entitled to delete. Losing
+-- one history record beats a mail that cannot be got rid of.
+function Queue:Push(kind, record, insist)
 	local handle = Mail:GetHandle(record)
-	if not handle then return false end
+	if not handle then return false, "That mail is no longer there." end
 
 	local txn = ns.Ledger and ns.Ledger:For(record) or nil
 	if not txn then
-		-- Without somewhere to write the outcome this mail could be emptied and
-		-- still read as waiting. It is left for a later round, by which point it
-		-- will have been observed.
 		ns.Archive.stats.settleMissed = ns.Archive.stats.settleMissed + 1
-		return false
+		if not insist then
+			return false, "Parcel is still reading that mail. Try again in a moment."
+		end
 	end
 
 	self.pending[#self.pending + 1] = { kind = kind, handle = handle, txn = txn }

@@ -169,6 +169,17 @@ function Parcel:PrintStatus()
 	self:Print(("%s, interface %d, profile %s."):format(
 		Options:GetFlavorLabel(), Compat.interface, self.db:GetCurrentProfile()))
 
+	-- What Collect will and will not do rests entirely on this number, so it is
+	-- said out loud next to the one on the backpack button. A gap between them
+	-- is a profession bag with room in it, which no mail attachment can use.
+	local free = Compat:GetFreeBagSlots()
+	local reported = Compat:ReportedFreeBagSlots()
+	if reported and reported ~= free then
+		self:Print(("%d bag slots free for mail, %d free altogether."):format(free, reported))
+	else
+		self:Print(("%d bag slots free."):format(free))
+	end
+
 	if not MailFrame or not MailFrame:IsShown() then
 		self:Print("Open a mailbox to see what is in it.")
 		return
@@ -268,9 +279,22 @@ function Parcel:PrintDiagnostics()
 		else
 			missing = missing + 1
 			if missing <= 5 then
-				self:Print(("  no entry: [%s] from %s, %.4f days left, complete=%s"):format(
+				self:Print(("  no entry: [%s] from %s, %.4f days left, items=%d, %s"):format(
 					tostring(record.subject), tostring(record.sender),
-					record.daysLeft or -1, tostring(ns.Archive:IsComplete(record))))
+					record.daysLeft or -1, record.itemCount or 0,
+					ns.Archive:WhyIncomplete(record) or "complete"))
+
+				-- Which slots the header is claiming against what the client
+				-- will actually name, because a header saying it carries
+				-- something the slots do not is what holds a mail unfiled.
+				local slots = {}
+				for slot = 1, ATTACHMENTS_MAX_RECEIVE do
+					if ns.Mail:HasAttachment(record.index, slot) then
+						slots[#slots + 1] = ("%d=%s"):format(slot,
+							tostring(GetInboxItem(record.index, slot)))
+					end
+				end
+				self:Print("    slots: " .. (#slots > 0 and table.concat(slots, ", ") or "none"))
 			end
 		end
 	end
