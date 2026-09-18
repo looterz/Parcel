@@ -1,9 +1,9 @@
-## Interface: 120007
+## Interface: 120100
 ## Title: Parcel
 ## Notes: A complete mailbox. Collect, sort, send, search and track your mail.
 ## Author: looterz
 ## X-License: MIT
-## Version: 1.7.5
+## Version: 1.8.0
 ## SavedVariables: ParcelDB
 ## IconTexture: Interface\AddOns\Parcel\Media\icon
 ## Category: Mail

@@ -507,7 +507,7 @@ end
 -- Parcel is standing in for it, so the reply would go somewhere invisible.
 -- Blizzard has already worked out the recipient and the prefixed subject by the
 -- time this runs, so they are read back rather than recomputed.
-hooksecurefunc("OpenMail_Reply", function()
+local function onBlizzardReply()
 	if not Window:IsShown() then return end
 
 	local recipient = SendMailNameEditBox and SendMailNameEditBox:GetText() or ""
@@ -515,4 +515,14 @@ hooksecurefunc("OpenMail_Reply", function()
 
 	Compose:Open(recipient, subject)
 	page.Body:SetFocus()
-end)
+end
+
+-- World of Warcraft: Forever moved the handler from the OpenMail_Reply global
+-- onto OpenMailReplyMixin. The mixin's functions were copied onto the button
+-- when it was created, so the hook has to go on the button, not the mixin.
+local replyButton = _G.OpenMailReplyButton
+if replyButton and replyButton.Reply then
+	hooksecurefunc(replyButton, "Reply", onBlizzardReply)
+elseif _G.OpenMail_Reply then
+	hooksecurefunc("OpenMail_Reply", onBlizzardReply)
+end

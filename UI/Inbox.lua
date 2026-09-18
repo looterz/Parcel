@@ -11,6 +11,7 @@ local Archive = ns.Archive
 local Filters = ns.Filters
 local Window = ns.Window
 local Events = ns.Events
+local Compat = ns.Compat
 
 local ROW_HEIGHT = 26
 local LIST_TOP = 52
@@ -58,7 +59,7 @@ local function fromArchive(entry)
 	local expires = entry.expires or 0
 	local items = entry.items or {}
 	local first = items[1]
-	local icon = first and first.id and GetItemIcon and GetItemIcon(first.id)
+	local icon = first and first.id and Compat:GetItemIcon(first.id)
 
 	return {
 		archived = entry,

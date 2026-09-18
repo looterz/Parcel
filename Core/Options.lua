@@ -7,6 +7,7 @@ local Compat = ns.Compat
 
 local FLAVOR_LABELS = {
 	retail = "Retail",
+	forever = "World of Warcraft: Forever",
 	vanilla = "Classic Era",
 	tbc = "Burning Crusade Classic",
 	wrath = "Wrath Classic",

@@ -1,4 +1,4 @@
-## Interface: 40402
+## Interface: 16001
 ## Title: Parcel
 ## Notes: A complete mailbox. Collect, sort, send, search and track your mail.
 ## Author: looterz

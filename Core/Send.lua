@@ -169,11 +169,10 @@ function Send:TradeGoodsSubclasses()
 	if subclassNames then return subclassNames end
 
 	subclassNames = {}
-	if not GetItemSubClassInfo then return subclassNames end
 
 	local class = self:TradeGoodsClass()
 	for id = 0, MAX_SUBCLASS do
-		local name = GetItemSubClassInfo(class, id)
+		local name = ns.Compat:GetItemSubClassInfo(class, id)
 		if name and name ~= "" then subclassNames[id] = name end
 	end
 
@@ -211,8 +210,7 @@ function Send:TradeGoodsInBags()
 					if not group then
 						group = {
 							subclass = key,
-							label = names[key] or (GetItemClassInfo and GetItemClassInfo(class))
-								or "Trade Goods",
+							label = names[key] or ns.Compat:GetItemClassInfo(class) or "Trade Goods",
 							items = {},
 						}
 						groups[key] = group

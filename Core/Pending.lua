@@ -140,6 +140,22 @@ function Pending:ReconcileAgainstListings(seen, complete)
 	return cleared
 end
 
+-- OwnedAuctionInfo carries no name on the Retail auction house, only the link
+-- and the item key, and a nameless record can never be settled against the
+-- sale mail that names the item.
+local function ownedAuctionName(info)
+	if info.itemName then return info.itemName end
+
+	local link = info.itemLink
+	local name = link and link:match("%[(.-)%]")
+	if name and name ~= "" then return name end
+
+	local itemID = info.itemKey and info.itemKey.itemID
+	if itemID and C_Item and C_Item.GetItemInfo then
+		return (C_Item.GetItemInfo(itemID))
+	end
+end
+
 function Pending:ReadOwnedAuctions()
 	local found, seen, complete = 0, {}, false
 
@@ -155,7 +171,7 @@ function Pending:ReadOwnedAuctions()
 			if info and info.status == sold then
 				local price = info.buyoutAmount or info.bidAmount or 0
 				seen[info.auctionID] = true
-				if self:Record(info.auctionID, info.itemName, info.quantity, price) then
+				if self:Record(info.auctionID, ownedAuctionName(info), info.quantity, price) then
 					found = found + 1
 				end
 			end

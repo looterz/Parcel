@@ -1,7 +1,8 @@
 # Parcel
 
 A complete mailbox for World of Warcraft. Collect, sort, send, search and track
-your mail, on every version of the game from Classic Era to modern Retail.
+your mail, on every version of the game from Classic Era to modern Retail, and
+on World of Warcraft: Forever.
 
 Parcel exists because Postal stopped being maintained and Mailbox Plus was
 discontinued, leaving a gap where the most used utility addon in the game used
@@ -106,8 +107,25 @@ Nothing else can tell you that.
   size and position back
 - Any feature can be switched off, and settings support profiles
 - Chat commands for everything, with a Help tab that documents them
-- One download covers Retail, Classic Era, Burning Crusade, Wrath, Cataclysm
-  and Mists
+- One download covers Retail, Classic Era, Burning Crusade, Wrath, Cataclysm,
+  Mists and World of Warcraft: Forever
+
+## Supported clients
+
+| Client | TOC | Interface |
+| --- | --- | --- |
+| Retail | `Parcel.toc` | 120100 |
+| World of Warcraft: Forever | `Parcel_Camelot.toc` | 16001 |
+| Classic Era, Season of Discovery, Hardcore | `Parcel_Vanilla.toc` | 11509 |
+| Anniversary (Burning Crusade) | `Parcel_TBC.toc` | 20506 |
+| Wrath Classic | `Parcel_Wrath.toc` | 30403 |
+| Cataclysm Classic | `Parcel_Cata.toc` | 40402 |
+| Classic (Mists of Pandaria) | `Parcel_Mists.toc` | 50504 |
+
+World of Warcraft: Forever runs the modern client under its own game type, so
+the game reads the Camelot file rather than the Retail one. Parcel treats it as
+a Retail client with Forever's own bags and bank, and reports it as Forever in
+`/parcel status`.
 
 ## Licence
 

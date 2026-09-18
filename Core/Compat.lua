@@ -7,8 +7,15 @@ local _G = _G
 
 local function projectFlavor()
 	local project = _G.WOW_PROJECT_ID
+	local interface = select(4, GetBuildInfo()) or 0
 	if project then
-		if project == _G.WOW_PROJECT_MAINLINE then return "retail" end
+		if project == _G.WOW_PROJECT_MAINLINE then
+			-- World of Warcraft: Forever is the mainline client running the 1.60
+			-- line, so it is the one mainline build whose interface is below the
+			-- 100000 that every modern expansion starts at.
+			if interface < 100000 then return "forever" end
+			return "retail"
+		end
 		if project == _G.WOW_PROJECT_CLASSIC then return "vanilla" end
 		if project == _G.WOW_PROJECT_BURNING_CRUSADE_CLASSIC then return "tbc" end
 		if project == _G.WOW_PROJECT_WRATH_CLASSIC then return "wrath" end
@@ -18,7 +25,6 @@ local function projectFlavor()
 
 	-- A client newer than this addon reports a WOW_PROJECT_ID we have no constant
 	-- for, so fall back to the interface number rather than refusing to load.
-	local interface = select(4, GetBuildInfo()) or 0
 	if interface >= 100000 then return "retail" end
 	if interface >= 50000 then return "mists" end
 	if interface >= 40000 then return "cata" end
@@ -29,14 +35,18 @@ end
 
 Compat.flavor = projectFlavor()
 Compat.interface = select(4, GetBuildInfo()) or 0
-Compat.isRetail = Compat.flavor == "retail"
+Compat.isForever = Compat.flavor == "forever"
+-- isRetail answers which API family the client has, and Forever has the Retail
+-- one: the C_ namespaces, the interaction manager, and none of the old globals.
+Compat.isRetail = Compat.flavor == "retail" or Compat.isForever
 Compat.isClassic = not Compat.isRetail
 
 -- Coin icons rather than the letters g, s and c. This is what the client's own
 -- money frames show, and it reads the same in every locale.
 --
--- GetCoinTextureString ships on every flavor Parcel supports. The text form is
--- kept behind it so a client that somehow lacks it degrades instead of erroring.
+-- The Retail clients only document the C_CurrencyInfo form and Forever has
+-- dropped the global, while the Classic clients only have the global. The text
+-- form is kept behind both so a client lacking either degrades instead of erroring.
 function ns.Money(copper)
 	copper = math.floor(tonumber(copper) or 0)
 
@@ -54,6 +64,9 @@ function ns.Money(copper)
 		return sign .. GetMoneyString(copper)
 	end
 
+	if C_CurrencyInfo and C_CurrencyInfo.GetCoinTextureString then
+		return sign .. C_CurrencyInfo.GetCoinTextureString(copper)
+	end
 	if GetCoinTextureString then return sign .. GetCoinTextureString(copper) end
 	return sign .. GetMoneyString(copper)
 end
@@ -260,9 +273,33 @@ function Compat:GetContainerItemInfo(bag, slot)
 	return C_Container.GetContainerItemInfo(bag, slot)
 end
 
+-- The item helpers moved into C_Item on Retail and the old globals are gone
+-- on World of Warcraft: Forever, while the Classic clients only have the globals.
+local function itemApi(name)
+	if C_Item and C_Item[name] then return C_Item[name] end
+	return _G[name]
+end
+
+function Compat:GetItemSubClassInfo(classID, subClassID)
+	local get = itemApi("GetItemSubClassInfo")
+	if get then return get(classID, subClassID) end
+end
+
+function Compat:GetItemClassInfo(classID)
+	local get = itemApi("GetItemClassInfo")
+	if get then return get(classID) end
+end
+
+-- C_Item.GetItemIcon wants an ItemLocation, so the id form has its own name.
+function Compat:GetItemIcon(itemID)
+	local get = (C_Item and C_Item.GetItemIconByID) or _G.GetItemIcon
+	if get then return get(itemID) end
+end
+
 function Compat:GetItemClass(item)
-	if GetItemInfoInstant then
-		local _, _, _, _, _, classID, subClassID = GetItemInfoInstant(item)
+	local instant = itemApi("GetItemInfoInstant")
+	if instant then
+		local _, _, _, _, _, classID, subClassID = instant(item)
 		if classID then
 			return classID, subClassID
 		end

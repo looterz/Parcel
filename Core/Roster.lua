@@ -280,11 +280,18 @@ function Roster:Suggest(text, limit)
 	-- of the text counts as the prefix. Passing a constant 1 means asking for
 	-- matches on the first letter only, which is why this returned nothing
 	-- useful; Blizzard passes the edit box's real cursor position.
-	if GetAutoCompleteResults then
+	--
+	-- Every client answers through C_AutoComplete. The global of the same name
+	-- is a shim that only loads behind the loadDeprecationFallbacks CVar, and it
+	-- takes the same six arguments, allowFullMatch sitting between the cursor
+	-- and the flags.
+	local query = (C_AutoComplete and C_AutoComplete.GetAutoCompleteResults) or GetAutoCompleteResults
+	if query then
 		local cursor = strlenutf8 and strlenutf8(text) or #text
-		local include = AUTOCOMPLETE_FLAG_ALL or 0
-		local exclude = AUTOCOMPLETE_FLAG_BNET or 0
-		local ok, results = pcall(GetAutoCompleteResults, text, limit, cursor, include, exclude)
+		local include = AUTOCOMPLETE_FLAG_ALL or 0xffffffff
+		local exclude = (Enum and Enum.AutoCompleteEntryFlag and Enum.AutoCompleteEntryFlag.Bnet)
+			or AUTOCOMPLETE_FLAG_BNET or 0
+		local ok, results = pcall(query, text, limit, cursor, false, include, exclude)
 		if ok and type(results) == "table" then
 			for _, entry in ipairs(results) do
 				if #out >= limit then return out end
